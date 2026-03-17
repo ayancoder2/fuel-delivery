@@ -1,0 +1,44 @@
+# The Podfile for the FuelDirect App.
+# This version uses a repo-tracked stable_pod_helper to ensure compatibility with Mac builders.
+
+platform :ios, '14.0' # Mandatory for google_maps_flutter
+
+# CocoaPods analytics sends network stats synchronously affecting build performance.
+ENV['COCOAPODS_DISABLE_STATS'] = '1'
+
+# 1. Load the stable bridge from the repo
+require_relative 'stable_pod_helper'
+
+# --- CocoaPods Configuration ---
+install! 'cocoapods', :deterministic_uuids => false
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  # 2. Install all Flutter plugin pods using the loaded helper
+  if defined?(flutter_install_all_ios_pods)
+    flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  else
+    puts "[FUELDIRECT] Error: flutter_install_all_ios_pods is NOT DEFINED."
+  end
+  
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    # Apply standard Flutter build settings if available
+    if defined?(flutter_additional_ios_build_settings)
+      flutter_additional_ios_build_settings(target)
+    end
+    
+    # 3. FORCED OVERRIDE: Every single pod MUST match our deployment target (14.0)
+    target.build_configurations.each do |config|
+      next if config.nil? || config.build_settings.nil?
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+    end
+  end
+end
