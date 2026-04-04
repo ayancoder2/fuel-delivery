@@ -1,0 +1,23 @@
+Analyzing Fueldirect_user_appp...                               
+
+   info - Use the null-aware marker '?' rather than a null check via an 'if' - lib\services\supabase_service.dart:66:7 - use_null_aware_elements
+   info - Use the null-aware marker '?' rather than a null check via an 'if' - lib\services\supabase_service.dart:67:7 - use_null_aware_elements
+   info - Use the null-aware marker '?' rather than a null check via an 'if' - lib\services\supabase_service.dart:68:7 - use_null_aware_elements
+
+flutter : 3 issues 
+found. (ran in 5.7s)
+At line:1 char:1
++ flutter analyze 2>&1 
+| Out-File -Encoding 
+ascii analyze_final.txt
++ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (3 issues foun   
+ d. (ran in 5.7s):S    
+tring) [], RemoteE    
+xception
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'add_vehicle_screen.dart';
 import 'schedule_delivery_screen.dart';
+import 'add_address_screen.dart';
+import '../../services/supabase_service.dart';
 
 class VehicleSelectionScreen extends StatefulWidget {
   const VehicleSelectionScreen({super.key});
@@ -13,19 +15,60 @@ class VehicleSelectionScreen extends StatefulWidget {
 class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
   int _selectedVehicleIndex = 0;
   int _selectedAddressIndex = 0;
-  double _amount = 45.0; // Default amount
+  double _amount = 45.0; 
   bool _isFullTank = false;
   bool _isCustomMode = false;
-  final TextEditingController _amountController = TextEditingController(
-    text: "45.00",
-  );
+  final TextEditingController _amountController = TextEditingController(text: "45.00");
 
   final List<double> _quickSelectOptions = [25.0, 45.0, 65.0];
-
   final FocusNode _amountFocusNode = FocusNode();
 
-  // Assuming $1.0833 per gallon based on 48.75 / 45
-  static const double _pricePerGallon = 1.0833;
+  List<Map<String, dynamic>> _vehicles = [];
+  List<Map<String, dynamic>> _addresses = [];
+  List<Map<String, dynamic>> _fuelPrices = [];
+  double _pricePerGallon = 3.49; // Default fallback
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final user = SupabaseService.currentUser;
+    if (user != null) {
+      final results = await Future.wait([
+        SupabaseService.getVehicles(user.id),
+        SupabaseService.getAddresses(user.id),
+        SupabaseService.getFuelPrices(),
+      ]);
+
+      if (mounted) {
+        setState(() {
+          _vehicles = results[0];
+          _addresses = results[1];
+          _fuelPrices = results[2];
+          _updatePricePerGallon();
+        });
+      }
+    }
+  }
+
+  void _updatePricePerGallon() {
+    if (_vehicles.isNotEmpty && _fuelPrices.isNotEmpty) {
+      final vehicle = _vehicles[_selectedVehicleIndex];
+      final fuelType = vehicle['fuel_type'] ?? 'Petrol';
+      
+      final priceEntry = _fuelPrices.firstWhere(
+        (p) => p['name'].toString().toLowerCase().contains(fuelType.toString().toLowerCase()),
+        orElse: () => _fuelPrices.first,
+      );
+      
+      setState(() {
+        _pricePerGallon = (priceEntry['price'] as num).toDouble();
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -47,9 +90,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
     setState(() {
       _isCustomMode = true;
       _isFullTank = false;
-      _amountController.text = _amount.toStringAsFixed(2);
     });
-    // Focus the text field when entering custom mode
     Future.delayed(const Duration(milliseconds: 100), () {
       _amountFocusNode.requestFocus();
     });
@@ -63,20 +104,12 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new,
-            color: Colors.black,
-            size: 20,
-          ),
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 20),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: const Text(
           'Vehicle Selection',
-          style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         centerTitle: true,
       ),
@@ -99,50 +132,40 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
               const SizedBox(height: 8),
               const Text(
                 'Select a vehicle from your garage to continue.',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF94A3B8),
-                  fontWeight: FontWeight.w500,
-                ),
+                style: TextStyle(fontSize: 14, color: Color(0xFF94A3B8), fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 24),
-              _buildVehicleCard(
-                index: 0,
-                name: 'Tesla Model 3',
-                type: 'Electric',
-                imageUrl:
-                    'https://www.kindpng.com/picc/m/112-1120928_tesla-model-3-white-front-view-white-tesla.png',
-              ),
-              const SizedBox(height: 12),
-              _buildVehicleCard(
-                index: 1,
-                name: 'BMW',
-                type: 'Fuel',
-                imageUrl:
-                    'https://purepng.com/public/uploads/large/purepng.com-white-bmw-carbmw-car-white-bmw-170152741548680hpe.png',
-              ),
-              const SizedBox(height: 12),
-              _buildVehicleCard(
-                index: 2,
-                name: 'Tesla Model 3',
-                type: 'Electric',
-                imageUrl:
-                    'https://www.kindpng.com/picc/m/112-1120928_tesla-model-3-white-front-view-white-tesla.png',
-              ),
+              
+              if (_vehicles.isEmpty)
+                const Center(child: Text('No vehicles added yet', style: TextStyle(color: Colors.grey)))
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _vehicles.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final v = _vehicles[index];
+                    return _buildVehicleCard(
+                      index: index,
+                      name: '${v['make']} ${v['model']}',
+                      type: v['type'] ?? v['fuel_type'] ?? 'Vehicle',
+                      imageUrl: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?q=80&w=2070&auto=format&fit=crop', // Generic car image
+                    );
+                  },
+                ),
               const SizedBox(height: 16),
               // Add New Vehicles Button (High Fidelity - Dotted Border)
               GestureDetector(
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (context) => const AddVehicleScreen(),
-                    ),
-                  );
+                    MaterialPageRoute(builder: (context) => const AddVehicleScreen()),
+                  ).then((_) => _loadData());
                 },
                 child: CustomPaint(
                   painter: DashedBorderPainter(
-                    color: const Color(0xFFCBD5E1), // Visible grey
+                    color: const Color(0xFFCBD5E1),
                     strokeWidth: 2,
                     dashWidth: 8,
                     dashSpace: 6,
@@ -159,20 +182,11 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: const [
-                        Icon(
-                          Icons.add_circle_outline,
-                          color: Color(0xFF64748B),
-                          size: 22,
-                        ),
+                        Icon(Icons.add_circle_outline, color: Color(0xFF64748B), size: 22),
                         SizedBox(width: 8),
                         Text(
                           'Add New Vehicles',
-                          style: TextStyle(
-                            color: Color(0xFF64748B),
-                            fontWeight: FontWeight.w900,
-                            fontSize: 15,
-                            letterSpacing: 0.5,
-                          ),
+                          style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 0.5),
                         ),
                       ],
                     ),
@@ -185,43 +199,39 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
                 children: [
                   const Text(
                     'Service Address',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF333333),
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF333333)),
                   ),
                   TextButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(
-                      Icons.add,
-                      size: 18,
-                      color: Color(0xFFFF6600),
-                    ),
-                    label: const Text(
-                      'Add Address',
-                      style: TextStyle(
-                        color: Color(0xFFFF6600),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const AddAddressScreen()),
+                      ).then((_) => _loadData());
+                    },
+                    icon: const Icon(Icons.add, size: 18, color: Color(0xFFFF6600)),
+                    label: const Text('Add Address', style: TextStyle(color: Color(0xFFFF6600), fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
-              _buildAddressCard(
-                index: 0,
-                title: 'Home',
-                address: '123 Main Street, San Francisco, CA 94102',
-                isHome: true,
-              ),
-              const SizedBox(height: 12),
-              _buildAddressCard(
-                index: 1,
-                title: 'Work',
-                address: '456 Market Street, San Francisco, CA 94105',
-                isHome: false,
-              ),
+              if (_addresses.isEmpty)
+                const Center(child: Text('No addresses found', style: TextStyle(color: Colors.grey)))
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _addresses.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final addr = _addresses[index];
+                    return _buildAddressCard(
+                      index: index,
+                      title: addr['title'],
+                      address: addr['address'],
+                      isHome: addr['title'].toString().toLowerCase() == 'home',
+                    );
+                  },
+                ),
               const SizedBox(height: 32),
               // Amount Section (High Fidelity)
               Container(
@@ -330,7 +340,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Price per gallon: \$$_pricePerGallon',
+                      'Price per gallon: \$${_pricePerGallon.toStringAsFixed(2)}',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         color: Color(0xFF64748B),
@@ -508,24 +518,23 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
                       height: 58,
                       child: ElevatedButton(
                         onPressed: () {
-                          String vehicle = _selectedVehicleIndex == 1
-                              ? 'BMW'
-                              : 'Tesla Model 3';
-                          String location = _selectedAddressIndex == 0
-                              ? 'Home (123 Main St)'
-                              : 'Work (456 Market St)';
-                          String fuelType = vehicle == 'BMW'
-                              ? 'Diesel'
-                              : 'Petrol';
+                          if (_vehicles.isEmpty || _addresses.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Please add both a vehicle and an address to continue.')),
+                            );
+                            return;
+                          }
+
+                          final vehicle = _vehicles[_selectedVehicleIndex];
+                          final address = _addresses[_selectedAddressIndex];
+                          
+                          String vehicleName = '${vehicle['make']} ${vehicle['model']}';
+                          String locationName = '${address['title']} (${address['address']})';
+                          String fuelType = vehicle['fuel_type'] ?? 'Petrol';
 
                           if (!_isFullTank && _amount < 20.0) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Minimum order amount is \$20.00',
-                                ),
-                                backgroundColor: Colors.red,
-                              ),
+                              const SnackBar(content: Text('Minimum order amount is \$20.00'), backgroundColor: Colors.red),
                             );
                             return;
                           }
@@ -533,8 +542,10 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (context) => ScheduleDeliveryScreen(
-                                vehicleName: vehicle,
-                                locationName: location,
+                                vehicleName: vehicleName,
+                                locationName: locationName,
+                                latitude: (address['latitude'] is int) ? (address['latitude'] as int).toDouble() : (address['latitude'] ?? 37.7749),
+                                longitude: (address['longitude'] is int) ? (address['longitude'] as int).toDouble() : (address['longitude'] ?? -122.4194),
                                 quantity: _isFullTank
                                     ? 'Full Tank'
                                     : '${(_amount / _pricePerGallon).toStringAsFixed(1)} gal',
@@ -542,6 +553,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
                                     ? '---'
                                     : '\$${_amount.toStringAsFixed(2)}',
                                 fuelType: fuelType,
+                                vehicleId: vehicle['id'] as String?,
                               ),
                             ),
                           );

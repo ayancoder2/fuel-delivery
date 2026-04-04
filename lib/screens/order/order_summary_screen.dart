@@ -1,18 +1,51 @@
 import 'package:flutter/material.dart';
+import '../../services/supabase_service.dart';
 import 'order_tracking_screen.dart';
 
-class OrderSummaryScreen extends StatelessWidget {
-  final String amount;
+class OrderSummaryScreen extends StatefulWidget {
+  final String vehicleName;
+  final String locationName;
+  final String fuelType;
   final String quantity;
-  final String fuelTotal;
+  final String amount;
+  final String subtotal;
+  final String discount;
+  final String? couponCode;
+  final bool useWallet;
+  final double latitude;
+  final double longitude;
+  final String? vehicleId;
+  final DateTime scheduledDate;
+  final String scheduledTimeSlot;
+  final String? notes;
+  final double? serviceFee;
 
   const OrderSummaryScreen({
     super.key,
-    this.amount = '\$45.00',
-    this.quantity = '41.5 gal',
-    this.fuelTotal =
-        '\$52.35', // Keep this or let it just be passed amount + $12 or whatever
+    required this.vehicleName,
+    required this.locationName,
+    required this.fuelType,
+    required this.quantity,
+    required this.amount,
+    required this.subtotal,
+    required this.discount,
+    required this.scheduledDate,
+    required this.scheduledTimeSlot,
+    required this.latitude,
+    required this.longitude,
+    this.couponCode,
+    this.useWallet = false,
+    this.vehicleId,
+    this.notes,
+    this.serviceFee,
   });
+
+  @override
+  State<OrderSummaryScreen> createState() => _OrderSummaryScreenState();
+}
+
+class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
+  bool _isPlacingOrder = false;
 
   @override
   Widget build(BuildContext context) {
@@ -66,15 +99,20 @@ class OrderSummaryScreen extends StatelessWidget {
               iconColor: const Color(0xFFFF6600),
               iconBgColor: const Color(0xFFFFECE0),
               children: [
-                _buildInfoRow('Fuel Type', 'Regular'),
+                _buildInfoRow('Fuel Type', widget.fuelType),
                 _buildInfoRow(
-                  'Price per Gallon',
-                  '\$3.49',
-                ), // Could pass this too if we wanted it dynamic
-                _buildInfoRow('Dollar Amount', amount),
-                _buildInfoRow('Est. Quantity', quantity),
+                  'Subtotal',
+                  widget.subtotal,
+                ),
+                if (widget.couponCode != null)
+                  _buildInfoRow(
+                    'Discount (${widget.couponCode})',
+                    '- ${widget.discount}',
+                    valueColor: Colors.green,
+                  ),
+                _buildInfoRow('Est. Quantity', widget.quantity),
                 const Divider(height: 32),
-                _buildInfoRow('Fuel Total', fuelTotal, isBold: true),
+                _buildInfoRow('Total Due', widget.amount, isBold: true),
               ],
             ),
             const SizedBox(height: 24),
@@ -89,23 +127,22 @@ class OrderSummaryScreen extends StatelessWidget {
                 _buildDeliveryInfoRow(
                   icon: Icons.directions_car_outlined,
                   title: 'Vehicle',
-                  value: 'Tesla Model 3',
-                  subtitle: 'ABC 1234',
+                  value: widget.vehicleName,
+                  subtitle: 'Primary Vehicle',
                 ),
                 const SizedBox(height: 16),
                 _buildDeliveryInfoRow(
                   icon: Icons.location_on_outlined,
                   title: 'Address',
-                  value: 'Home',
-                  subtitle: '123 Main Street, San Francisco, CA 94102',
+                  value: widget.locationName,
+                  subtitle: 'Selected Delivery Spot',
                 ),
                 const SizedBox(height: 16),
                 _buildDeliveryInfoRow(
                   icon: Icons.access_time_outlined,
                   title: 'Scheduled Time',
-                  value:
-                      'Invalid Date', // Matching screenshot literally or should I fix it? Screenshot says Invalid Date.
-                  valueColor: Colors.red,
+                  value: '${['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][widget.scheduledDate.month]} ${widget.scheduledDate.day}, ${widget.scheduledDate.year}',
+                  subtitle: widget.scheduledTimeSlot,
                 ),
               ],
             ),
@@ -140,9 +177,25 @@ class OrderSummaryScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
                   _buildInfoRow(
-                    'Fuel Cost',
-                    amount,
-                  ), // Fixing the split $52 .35 from screenshot to a clean one or matching? Screenshot has $52 and .35 below.
+                    'Subtotal',
+                    widget.subtotal,
+                  ),
+                  if (widget.serviceFee != null && widget.serviceFee! > 0)
+                    _buildInfoRow(
+                      'Service Fee',
+                      '+\$${widget.serviceFee!.toStringAsFixed(2)}',
+                    ),
+                  if (widget.couponCode != null)
+                    _buildInfoRow(
+                      'Discount (${widget.couponCode})',
+                      '- ${widget.discount}',
+                      valueColor: Colors.green,
+                    ),
+                  _buildInfoRow(
+                    'Points to Earn',
+                    '+${(double.tryParse(widget.amount.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0).floor()} pts',
+                    valueColor: const Color(0xFFFF6600),
+                  ),
                   const Divider(height: 32),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -156,7 +209,7 @@ class OrderSummaryScreen extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        fuelTotal,
+                        widget.amount,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 24,
@@ -184,17 +237,14 @@ class OrderSummaryScreen extends StatelessWidget {
                     width: 60,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF2F80ED),
+                      color: widget.useWallet ? const Color(0xFFE3F2FD) : const Color(0xFF2F80ED),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Center(
-                      child: Text(
-                        'VISA',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
+                    child: Center(
+                      child: Icon(
+                          widget.useWallet ? Icons.account_balance_wallet : Icons.credit_card,
+                        color: widget.useWallet ? const Color(0xFF2196F3) : Colors.white,
+                        size: 20,
                       ),
                     ),
                   ),
@@ -203,32 +253,22 @@ class OrderSummaryScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          '•••• 4242',
-                          style: TextStyle(
+                        Text(
+                          widget.useWallet ? 'Fuel Wallet' : '•••• 4242',
+                          style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
                             color: Color(0xFF333333),
                           ),
                         ),
-                        const Text(
-                          'Default payment',
-                          style: TextStyle(
+                        Text(
+                          widget.useWallet ? 'Available Balance' : 'DEFAULT METHOD',
+                          style: const TextStyle(
                             fontSize: 12,
                             color: Color(0xFFAAAAAA),
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {},
-                    child: const Text(
-                      'Change',
-                      style: TextStyle(
-                        color: Color(0xFFFF6600),
-                        fontWeight: FontWeight.bold,
-                      ),
                     ),
                   ),
                 ],
@@ -244,12 +284,66 @@ class OrderSummaryScreen extends StatelessWidget {
           width: double.infinity,
           height: 60,
           child: ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const OrderTrackingScreen(),
-                ),
-              );
+            onPressed: _isPlacingOrder ? null : () async {
+              final user = SupabaseService.currentUser;
+              if (user != null) {
+                setState(() => _isPlacingOrder = true);
+                try {
+                  // Parsing values from string (e.g. "$45.00" -> 45.0)
+                  double total = double.tryParse(widget.amount.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
+                  double qty = double.tryParse(widget.quantity.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
+
+                  // WALLET DEDUCTION
+                  if (widget.useWallet) {
+                    await SupabaseService.processWalletTransaction(
+                      userId: user.id,
+                      amount: total,
+                      type: 'PAYMENT',
+                      description: 'Fuel Order Payment',
+                    );
+                  }
+
+                  // COUPON USAGE INCREMENT
+                  if (widget.couponCode != null && widget.couponCode!.isNotEmpty) {
+                    await SupabaseService.incrementCouponUsage(widget.couponCode!);
+                  }
+
+                  final order = await SupabaseService.createOrder(
+                    userId: user.id,
+                    fuelType: widget.fuelType,
+                    quantity: qty,
+                    totalPrice: total,
+                    address: widget.locationName,
+                    lat: widget.latitude,
+                    lng: widget.longitude,
+                    scheduledTime: widget.scheduledDate,
+                    vehicleId: widget.vehicleId,
+                  );
+
+                  if (!context.mounted) return;
+                  if (order != null) {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(
+                        builder: (context) => OrderTrackingScreen(
+                          orderId: order['id'],
+                        ),
+                      ),
+                      (route) => route.isFirst,
+                    );
+                  } else {
+                    setState(() => _isPlacingOrder = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Failed to place order. No drivers available in your area.'), backgroundColor: Colors.red),
+                    );
+                  }
+                } catch (e) {
+                  if (!context.mounted) return;
+                  setState(() => _isPlacingOrder = false);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFFF6600),
@@ -259,20 +353,22 @@ class OrderSummaryScreen extends StatelessWidget {
               ),
               elevation: 0,
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'Place Order - $fuelTotal',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
+            child: _isPlacingOrder 
+              ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Place Order - ${widget.amount}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                const Icon(Icons.check, size: 20),
-              ],
-            ),
+                  const SizedBox(width: 10),
+                  const Icon(Icons.check, size: 20),
+                ],
+              ),
           ),
         ),
       ),
@@ -325,7 +421,7 @@ class OrderSummaryScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoRow(String label, String value, {bool isBold = false}) {
+  Widget _buildInfoRow(String label, String value, {bool isBold = false, Color? valueColor}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -339,12 +435,16 @@ class OrderSummaryScreen extends StatelessWidget {
               fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
             ),
           ),
-          Text(
-            value,
-            style: TextStyle(
-              color: const Color(0xFF333333),
-              fontSize: 16,
-              fontWeight: isBold ? FontWeight.bold : FontWeight.bold,
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: valueColor ?? const Color(0xFF333333),
+                fontSize: 16,
+                fontWeight: isBold ? FontWeight.bold : FontWeight.bold,
+              ),
             ),
           ),
         ],

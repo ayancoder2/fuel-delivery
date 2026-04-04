@@ -5,12 +5,18 @@ class FuelSelectionScreen extends StatefulWidget {
   final String vehicleName;
   final String locationName;
   final String quantity;
+  final String amount;
+  final double latitude;
+  final double longitude;
 
   const FuelSelectionScreen({
     super.key,
     required this.vehicleName,
     required this.locationName,
     required this.quantity,
+    required this.amount,
+    required this.latitude,
+    required this.longitude,
   });
 
   @override
@@ -133,6 +139,9 @@ class _FuelSelectionScreenState extends State<FuelSelectionScreen> {
                     vehicleName: widget.vehicleName,
                     locationName: widget.locationName,
                     quantity: widget.quantity,
+                    amount: widget.amount,
+                    latitude: widget.latitude,
+                    longitude: widget.longitude,
                     fuelType: _selectedFuelIndex == 0 ? 'Petrol' : 'Diesel',
                   ),
                 ),

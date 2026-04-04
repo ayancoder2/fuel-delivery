@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../services/supabase_service.dart';
 import 'login_screen.dart';
-import '../dashboard/dashboard_screen.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -10,8 +10,26 @@ class SignUpScreen extends StatefulWidget {
 }
 
 class _SignUpScreenState extends State<SignUpScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  
+  bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,33 +73,79 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
               ),
               const SizedBox(height: 32),
-              _buildLabel('Full Name'),
-              _buildTextField('Alexander Pierce'),
-              const SizedBox(height: 20),
-              _buildLabel('Email Address'),
-              _buildTextField('alex@example.com', keyboardType: TextInputType.emailAddress),
-              const SizedBox(height: 20),
-              _buildLabel('Phone Number'),
-              _buildTextField('+1 (555) 000-0000', keyboardType: TextInputType.phone),
-              const SizedBox(height: 20),
-              _buildLabel('Password'),
-              _buildTextField(
-                'Create a password',
-                isPassword: true,
-                obscureText: _obscurePassword,
-                onToggleVisibility: () {
-                  setState(() => _obscurePassword = !_obscurePassword);
-                },
-              ),
-              const SizedBox(height: 20),
-              _buildLabel('Confirm Password'),
-              _buildTextField(
-                'Confirm your password',
-                isPassword: true,
-                obscureText: _obscureConfirmPassword,
-                onToggleVisibility: () {
-                  setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
-                },
+              Form(
+                key: _formKey,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildLabel('Full Name'),
+                    _buildTextFormField(
+                      controller: _nameController,
+                      hint: 'Alexander Pierce',
+                      validator: (value) => value == null || value.isEmpty ? 'Please enter your name' : null,
+                    ),
+                    const SizedBox(height: 20),
+                    _buildLabel('Email Address'),
+                    _buildTextFormField(
+                      controller: _emailController,
+                      hint: 'alex@example.com',
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) return 'Please enter your email';
+                        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) return 'Please enter a valid email';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    _buildLabel('Phone Number'),
+                    _buildTextFormField(
+                      controller: _phoneController,
+                      hint: '03001234567',
+                      keyboardType: TextInputType.phone,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) return 'Please enter your phone number';
+                        // Strict validation: Allow only digits, 10-15 characters
+                        if (!RegExp(r'^\d{10,15}$').hasMatch(value.replaceAll(RegExp(r'[\s\-\+]'), ''))) {
+                          return 'Please enter a valid phone number (10-15 digits)';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    _buildLabel('Password'),
+                    _buildTextFormField(
+                      controller: _passwordController,
+                      hint: 'Create a password (min. 6 characters)',
+                      isPassword: true,
+                      obscureText: _obscurePassword,
+                      onToggleVisibility: () {
+                        setState(() => _obscurePassword = !_obscurePassword);
+                      },
+                      validator: (value) {
+                        if (value == null || value.isEmpty) return 'Please enter a password';
+                        if (value.length < 6) return 'Password must be at least 6 characters';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    _buildLabel('Confirm Password'),
+                    _buildTextFormField(
+                      controller: _confirmPasswordController,
+                      hint: 'Confirm your password',
+                      isPassword: true,
+                      obscureText: _obscureConfirmPassword,
+                      onToggleVisibility: () {
+                        setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
+                      },
+                      validator: (value) {
+                        if (value == null || value.isEmpty) return 'Please confirm your password';
+                        if (value != _passwordController.text) return 'Passwords do not match';
+                        return null;
+                      },
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 24),
               Padding(
@@ -110,10 +174,61 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 width: double.infinity,
                 height: 60,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (context) => const DashboardScreen()),
-                    );
+                  onPressed: _isLoading ? null : () async {
+                    if (!_formKey.currentState!.validate()) return;
+
+                    final messenger = ScaffoldMessenger.of(context);
+                    setState(() => _isLoading = true);
+                    try {
+                      debugPrint('Starting SignUp for: ${_emailController.text}');
+                      await SupabaseService.signUp(
+                        email: _emailController.text.trim(),
+                        password: _passwordController.text.trim(),
+                        fullName: _nameController.text.trim(),
+                        phone: _phoneController.text.trim(),
+                      );
+                      debugPrint('SignUp Successful');
+                      
+                      if (!context.mounted) return;
+                      
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Success'),
+                          content: const Text('Your account has been created successfully! Please sign in to continue.'),
+                          actions: [
+                            TextButton(
+                              onPressed: () {
+                                Navigator.of(context).pop(); // Close dialog
+                                Navigator.of(context).pushReplacement(
+                                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                                );
+                              },
+                              child: const Text('OK'),
+                            ),
+                          ],
+                        ),
+                      );
+                    } catch (e) {
+                      debugPrint('SignUp Error: $e');
+                      String errorMessage = e.toString();
+                      if (errorMessage.contains('AuthWeakPasswordException')) {
+                        errorMessage = 'Password is too weak. Please use at least 6 characters.';
+                      } else if (errorMessage.contains('User already registered')) {
+                        errorMessage = 'This email is already registered.';
+                      } else if (errorMessage.contains('over_email_send_rate_limit') || errorMessage.contains('429')) {
+                        errorMessage = 'Too many attempts. Please wait a bit before trying again.';
+                      }
+                      
+                      if (mounted) {
+                        messenger.showSnackBar(
+                          SnackBar(content: Text(errorMessage)),
+                        );
+                      }
+                    } finally {
+                      if (mounted) setState(() => _isLoading = false);
+                    }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFF6600),
@@ -187,8 +302,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  Widget _buildTextField(
-    String hint, {
+  Widget _buildTextFormField({
+    required TextEditingController controller,
+    required String hint,
+    required String? Function(String?) validator,
     bool isPassword = false,
     bool obscureText = false,
     VoidCallback? onToggleVisibility,
@@ -199,9 +316,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
         color: const Color(0xFFF9F9F9),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: TextField(
+      child: TextFormField(
+        controller: controller,
         obscureText: isPassword && obscureText,
         keyboardType: keyboardType,
+        validator: validator,
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: const TextStyle(color: Color(0xFFCCCCCC)),
@@ -216,6 +335,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   onPressed: onToggleVisibility,
                 )
               : null,
+          errorStyle: const TextStyle(height: 0.8), // Keep error text close
         ),
       ),
     );

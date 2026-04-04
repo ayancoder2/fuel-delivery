@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'track_realtime_screen.dart';
-import '../dashboard/dashboard_screen.dart';
+import '../auth/login_screen.dart';
 
 class FuelOnboardingScreen extends StatelessWidget {
   const FuelOnboardingScreen({super.key});
@@ -20,7 +20,7 @@ class FuelOnboardingScreen extends StatelessWidget {
                   TextButton(
                     onPressed: () {
                       Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (context) => const DashboardScreen()),
+                        MaterialPageRoute(builder: (context) => const LoginScreen()),
                       );
                     },
                     child: const Text(

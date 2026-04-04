@@ -1,11 +1,32 @@
 import 'package:flutter/material.dart';
 import '../dashboard/dashboard_screen.dart';
 
-class DeliveryCompleteScreen extends StatelessWidget {
-  const DeliveryCompleteScreen({super.key});
+import '../../services/supabase_service.dart';
+import '../../services/receipt_service.dart';
+
+class DeliveryCompleteScreen extends StatefulWidget {
+  final Map<String, dynamic>? orderData;
+
+  const DeliveryCompleteScreen({
+    super.key,
+    this.orderData,
+  });
+
+  @override
+  State<DeliveryCompleteScreen> createState() => _DeliveryCompleteScreenState();
+}
+
+class _DeliveryCompleteScreenState extends State<DeliveryCompleteScreen> {
+  int _rating = 0;
+  bool _isSubmitting = false;
 
   @override
   Widget build(BuildContext context) {
+    // Extract dynamic data or provide defaults
+    final String quantity = widget.orderData?['quantity']?.toString() ?? '---';
+    final String fuelType = widget.orderData?['fuel_type'] ?? 'Fuel';
+    final String address = widget.orderData?['delivery_address'] ?? 'Unknown location';
+    final double totalPrice = (widget.orderData?['total_price'] ?? 0.0).toDouble();
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
@@ -145,9 +166,9 @@ class DeliveryCompleteScreen extends StatelessWidget {
                             color: const Color(0xFFFFF0E6),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Text(
-                            '15.4 Gallons',
-                            style: TextStyle(
+                          child: Text(
+                            '$quantity Gallons',
+                            style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
                               color: Color(0xFFFF6600),
@@ -157,9 +178,9 @@ class DeliveryCompleteScreen extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    const Text(
-                      'Premium 93 Octane',
-                      style: TextStyle(
+                    Text(
+                      fuelType,
+                      style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF333333),
@@ -173,7 +194,7 @@ class DeliveryCompleteScreen extends StatelessWidget {
                     _buildDetailRow(
                       icon: Icons.location_on,
                       title: 'Delivery Location',
-                      value: '1245 Wilshire Blvd, Los Angeles',
+                      value: address,
                     ),
                     
                     const SizedBox(height: 20),
@@ -182,7 +203,7 @@ class DeliveryCompleteScreen extends StatelessWidget {
                     _buildDetailRow(
                       icon: Icons.location_on, // Reusing pin icon as seen in screenshot
                       title: 'PAYMENT',
-                      value: 'Apple Pay • Total \$78.54',
+                      value: 'Card/Wallet • Total \$${totalPrice.toStringAsFixed(2)}',
                     ),
                   ],
                 ),
@@ -201,12 +222,19 @@ class DeliveryCompleteScreen extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(5, (index) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4.0),
-                    child: Icon(
-                      Icons.star_outline,
-                      color: Color(0xFFCCCCCC),
-                      size: 32,
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _rating = index + 1;
+                      });
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                      child: Icon(
+                        index < _rating ? Icons.star : Icons.star_outline,
+                        color: index < _rating ? const Color(0xFFFF6600) : const Color(0xFFCCCCCC),
+                        size: 40,
+                      ),
                     ),
                   );
                 }),
@@ -226,7 +254,15 @@ class DeliveryCompleteScreen extends StatelessWidget {
               width: double.infinity,
               height: 56,
               child: ElevatedButton(
-                onPressed: () {},
+                onPressed: () {
+                  if (widget.orderData != null) {
+                    ReceiptService.generateAndOpenReceipt(widget.orderData!);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('No order data found to generate receipt.')),
+                    );
+                  }
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFF6600),
                   foregroundColor: Colors.white,
@@ -253,7 +289,21 @@ class DeliveryCompleteScreen extends StatelessWidget {
               width: double.infinity,
               height: 56,
               child: TextButton(
-                onPressed: () {
+                onPressed: _isSubmitting ? null : () async {
+                  if (_rating > 0 && widget.orderData != null) {
+                    setState(() => _isSubmitting = true);
+                    final user = SupabaseService.currentUser;
+                    if (user != null) {
+                      await SupabaseService.submitReview(
+                        orderId: widget.orderData!['id'],
+                        userId: user.id,
+                        rating: _rating,
+                        feedback: '',
+                      );
+                    }
+                  }
+                  
+                  if (!context.mounted) return;
                   Navigator.of(context).pushAndRemoveUntil(
                     MaterialPageRoute(builder: (context) => const DashboardScreen()),
                     (route) => false,
@@ -266,17 +316,19 @@ class DeliveryCompleteScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.home_outlined, size: 20),
-                    SizedBox(width: 12),
-                    Text(
-                      'Home',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
+                child: _isSubmitting 
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Color(0xFFFF6600), strokeWidth: 2))
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.home_outlined, size: 20),
+                          SizedBox(width: 12),
+                          Text(
+                            'Submit & Go Home',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
               ),
             ),
           ],

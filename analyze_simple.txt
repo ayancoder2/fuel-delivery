@@ -1,0 +1,6 @@
+Analyzing Fueldirect_user_appp...                               
+
+   info - Use the null-aware marker '?' rather than a null check via an 'if' - lib\services\supabase_service.dart:66:7 - use_null_aware_elements
+   info - Use the null-aware marker '?' rather than a null check via an 'if' - lib\services\supabase_service.dart:67:7 - use_null_aware_elements
+   info - Use the null-aware marker '?' rather than a null check via an 'if' - lib\services\supabase_service.dart:68:7 - use_null_aware_elements
+

@@ -7,14 +7,20 @@ class ScheduleDeliveryScreen extends StatefulWidget {
   final String fuelType;
   final String quantity;
   final String amount;
+  final String? vehicleId;
+  final double latitude;
+  final double longitude;
 
   const ScheduleDeliveryScreen({
     super.key,
-    this.vehicleName = 'Tesla Model 3',
-    this.locationName = 'Home (123 Main St)',
-    this.fuelType = 'Petrol',
-    this.quantity = '45.0',
-    this.amount = '\$45.00',
+    required this.vehicleName,
+    required this.locationName,
+    required this.latitude,
+    required this.longitude,
+    required this.fuelType,
+    required this.quantity,
+    required this.amount,
+    this.vehicleId,
   });
 
   @override
@@ -392,9 +398,22 @@ class _ScheduleDeliveryScreenState extends State<ScheduleDeliveryScreen> {
           child: ElevatedButton(
             onPressed: isContinueEnabled
                 ? () {
+                    final timeSlot = _timeSlots[_selectedTimeIndex]['time'] as String;
+                    
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (context) => const PaymentDetailsScreen(),
+                        builder: (context) => PaymentDetailsScreen(
+                          vehicleName: widget.vehicleName,
+                          locationName: widget.locationName,
+                          latitude: widget.latitude,
+                          longitude: widget.longitude,
+                          fuelType: widget.fuelType,
+                          quantity: widget.quantity,
+                          amount: widget.amount,
+                          vehicleId: widget.vehicleId,
+                          scheduledDate: _selectedDate,
+                          scheduledTimeSlot: timeSlot.replaceAll('\n', ' '),
+                        ),
                       ),
                     );
                   }
@@ -441,14 +460,19 @@ class _ScheduleDeliveryScreenState extends State<ScheduleDeliveryScreen> {
       padding: const EdgeInsets.only(bottom: 12.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label, style: const TextStyle(fontSize: 13, color: Colors.grey)),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF333333),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF333333),
+              ),
             ),
           ),
         ],

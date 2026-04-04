@@ -1,0 +1,25 @@
+Analyzing Fueldirect_user_appp...                               
+
+warning - Unused import: 'package:timezone/timezone.dart' - lib\services\notification_service.dart:3:8 - unused_import
+  error - The named parameter 'settings' is required, but there's no corresponding argument - lib\services\notification_service.dart:29:32 - missing_required_argument
+  error - Too many positional arguments: 0 expected, but 1 found - lib\services\notification_service.dart:30:7 - extra_positional_arguments_could_be_named
+  error - The named parameter 'id' is required, but there's no corresponding argument - lib\services\notification_service.dart:76:32 - missing_required_argument
+  error - Too many positional arguments: 0 expected, but 4 found - lib\services\notification_service.dart:76:37 - extra_positional_arguments_could_be_named
+
+flutter : 5 issues 
+found. (ran in 8.3s)
+At line:1 char:1
++ flutter analyze 2>&1 
+| Out-File -Encoding 
+ascii analyze_p11.txt
++ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (5 issues foun   
+ d. (ran in 8.3s):S    
+tring) [], RemoteE    
+xception
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 

@@ -1,0 +1,42 @@
+﻿Resolving dependencies...
+Downloading packages...
+  app_links 6.4.1 (7.0.0 available)
+  dart_jsonwebtoken 3.3.2 (3.4.0 available)
+  flutter_dotenv 5.2.1 (6.0.0 available)
+  google_maps_flutter 2.14.2 (2.16.0 available)
+  google_maps_flutter_android 2.18.12 (2.19.3 available)
+  google_maps_flutter_ios 2.17.3 (2.18.0 available)
+  google_maps_flutter_platform_interface 2.14.1 (2.15.0 available)
+  google_maps_flutter_web 0.5.14+3 (0.6.2 available)
+  intl 0.19.0 (0.20.2 available)
+  meta 1.17.0 (1.18.2 available)
+  test_api 0.7.10 (0.7.11 available)
+  vector_math 2.2.0 (2.3.0 available)
+Got dependencies!
+12 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Analyzing Fueldirect_user_appp...                               
+
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\profile\payments_screen.dart:39:28 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\profile\payments_screen.dart:44:28 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\profile\payments_screen.dart:67:30 - use_build_context_synchronously
+
+flutter : 3 issues 
+found. (ran in 5.0s)
+At line:1 char:1
++ flutter analyze > 
+final_check_3.txt 
+2>&1; powershell 
+-Command "Get-Co ...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (3 issues foun   
+ d. (ran in 5.0s):S    
+tring) [], RemoteE    
+xception
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 

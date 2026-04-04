@@ -1,10 +1,32 @@
 import 'package:flutter/material.dart';
+import '../../services/receipt_service.dart';
+import 'order_summary_screen.dart';
 
 class OrderDetailsScreen extends StatelessWidget {
-  const OrderDetailsScreen({super.key});
+  final Map<String, dynamic> order;
+
+  const OrderDetailsScreen({super.key, required this.order});
 
   @override
   Widget build(BuildContext context) {
+    final vehicle = order['vehicles'];
+    final fuelType = order['fuel_type'] ?? 'Premium Diesel';
+    final quantity = order['quantity'] ?? 0.0;
+    final totalPrice = (order['total_price'] ?? 0.0) is int 
+        ? (order['total_price'] as int).toDouble() 
+        : (order['total_price'] ?? 0.0);
+    final address = order['delivery_address'] ?? 'No address provided';
+    final status = order['status'] ?? 'DELIVERED';
+    final createdAt = order['created_at'] != null 
+        ? DateTime.parse(order['created_at']).toLocal() 
+        : DateTime.now();
+
+    // Simulated helper for formatting
+    String formatDate(DateTime date) {
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return '${months[date.month - 1]} ${date.day}, ${date.year}';
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
@@ -43,27 +65,6 @@ class OrderDetailsScreen extends StatelessWidget {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            const SizedBox(height: 16),
-            // Search Bar
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFEEEEEE)),
-                ),
-                child: const TextField(
-                  decoration: InputDecoration(
-                    icon: Icon(Icons.search, color: Color(0xFFAAAAAA)),
-                    hintText: 'Search for a different location..',
-                    hintStyle: TextStyle(color: Color(0xFFAAAAAA), fontSize: 14),
-                    border: InputBorder.none,
-                  ),
-                ),
-              ),
-            ),
             const SizedBox(height: 24),
 
             // Delivery Location
@@ -92,17 +93,17 @@ class OrderDetailsScreen extends StatelessWidget {
                       children: [
                         Container(
                           padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFECE0),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFFFECE0),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(Icons.location_on_rounded, color: Color(0xFFFF6600), size: 18),
                         ),
                         const SizedBox(width: 16),
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            '1245 Wilshire Blvd, Los Angeles',
-                            style: TextStyle(
+                            address,
+                            style: const TextStyle(
                               color: Color(0xFF333333),
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
@@ -117,7 +118,7 @@ class OrderDetailsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
 
-            // Vehicle & Driver Cards
+            // Vehicle & Order Date Cards
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
               child: Row(
@@ -125,18 +126,18 @@ class OrderDetailsScreen extends StatelessWidget {
                   Expanded(
                     child: _buildInfoCard(
                       title: 'VEHICLE',
-                      name: 'Black Tesla',
-                      subtitle: 'Black Tesla',
+                      name: vehicle != null ? '${vehicle['make']} ${vehicle['model']}' : 'Unknown Vehicle',
+                      subtitle: vehicle != null ? vehicle['license_plate'] : 'N/A',
                       icon: Icons.directions_car_filled_rounded,
                     ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: _buildInfoCard(
-                      title: 'DRIVER',
-                      name: 'Marcus J.',
-                      subtitle: 'Black Tesla',
-                      icon: Icons.directions_car_filled_rounded,
+                      title: 'ORDER DATE',
+                      name: formatDate(createdAt),
+                      subtitle: status,
+                      icon: Icons.calendar_today_rounded,
                     ),
                   ),
                 ],
@@ -168,16 +169,16 @@ class OrderDetailsScreen extends StatelessWidget {
                     const SizedBox(height: 8),
                     const Divider(color: Color(0xFFEEEEEE)),
                     const SizedBox(height: 16),
-                    _buildCostRow('Fuel (Premium, 15 Gal)', '\$72.50'),
+                    _buildCostRow('Fuel ($fuelType, ${quantity}L)', 'Rs. ${totalPrice.toStringAsFixed(2)}'),
                     const SizedBox(height: 12),
-                    _buildCostRow('Delivery Fee', '\$12.00'),
+                    _buildCostRow('Delivery Fee', 'Rs. 0.00'),
                     const SizedBox(height: 12),
-                    _buildCostRow('Service Fee', '\$2.60'),
+                    _buildCostRow('Service Fee', 'Rs. 0.00'),
                     const SizedBox(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: const [
-                        Text(
+                      children: [
+                        const Text(
                           'Total Amount',
                           style: TextStyle(
                             fontSize: 16,
@@ -186,8 +187,8 @@ class OrderDetailsScreen extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '\$77.75',
-                          style: TextStyle(
+                          'Rs. ${totalPrice.toStringAsFixed(2)}',
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w900,
                             color: Color(0xFFFF6600),
@@ -204,35 +205,65 @@ class OrderDetailsScreen extends StatelessWidget {
             // Download Receipt
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFF5F5F5)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFECE0),
-                        borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Row(
+                        children: [
+                          CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          SizedBox(width: 16),
+                          Text('Generating receipt PDF...'),
+                        ],
                       ),
-                      child: const Icon(Icons.receipt_long_rounded, color: Color(0xFFFF6600), size: 24),
+                      backgroundColor: Color(0xFFFF6600),
+                      duration: Duration(seconds: 1),
                     ),
-                    const SizedBox(width: 16),
-                    const Text(
-                      'Download Receipt',
-                      style: TextStyle(
-                        color: Color(0xFF333333),
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
+                  );
+                  
+                  try {
+                    await ReceiptService.generateAndOpenReceipt(order);
+                  } catch (e) {
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to generate receipt: $e'),
+                        backgroundColor: Colors.red,
                       ),
-                    ),
-                    const Spacer(),
-                    const Icon(Icons.file_download_outlined, color: Color(0xFF555555), size: 24),
-                  ],
+                    );
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFF5F5F5)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFECE0),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.receipt_long_rounded, color: Color(0xFFFF6600), size: 24),
+                      ),
+                      const SizedBox(width: 16),
+                      const Text(
+                        'Download Receipt',
+                        style: TextStyle(
+                          color: Color(0xFF333333),
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      const Icon(Icons.file_download_outlined, color: Color(0xFF555555), size: 24),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -247,7 +278,26 @@ class OrderDetailsScreen extends StatelessWidget {
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
-            onPressed: () {},
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => OrderSummaryScreen(
+                    vehicleName: vehicle != null ? '${vehicle['make']} ${vehicle['model']}' : 'Unknown Vehicle',
+                    locationName: address,
+                    fuelType: fuelType,
+                    quantity: '${quantity}L',
+                    amount: 'Rs. ${totalPrice.toStringAsFixed(2)}',
+                    subtotal: 'Rs. ${totalPrice.toStringAsFixed(2)}',
+                    discount: 'Rs. 0.00',
+                    scheduledDate: DateTime.now(),
+                    scheduledTimeSlot: '9:00 AM - 12:00 PM', // Default slot for re-order
+                    latitude: order['latitude'] ?? 0.0,
+                    longitude: order['longitude'] ?? 0.0,
+                    vehicleId: order['vehicle_id'],
+                  ),
+                ),
+              );
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFFF6600),
               shape: RoundedRectangleBorder(

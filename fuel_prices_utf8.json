@@ -1,0 +1,65 @@
+﻿[
+    {
+        "id":  "ad2d3e51-0a41-420e-bfe2-5d1b2036deac",
+        "name":  "Petrol",
+        "price":  3.49,
+        "unit":  "gal",
+        "icon_name":  "local_gas_station",
+        "created_at":  "2026-03-20T23:59:33.83387+00:00",
+        "updated_at":  "2026-03-20T23:59:33.83387+00:00"
+    },
+    {
+        "id":  "17596c54-cc35-44be-a303-7bb23396e7aa",
+        "name":  "Fuel",
+        "price":  3.32,
+        "unit":  "gal",
+        "icon_name":  "local_gas_station",
+        "created_at":  "2026-03-20T23:59:33.83387+00:00",
+        "updated_at":  "2026-03-20T23:59:33.83387+00:00"
+    },
+    {
+        "id":  "b30b8992-7ed2-483c-9170-2f3f2b87c14e",
+        "name":  "Petrol 95",
+        "price":  3.69,
+        "unit":  "gal",
+        "icon_name":  "local_gas_station",
+        "created_at":  "2026-03-20T23:59:33.83387+00:00",
+        "updated_at":  "2026-03-20T23:59:33.83387+00:00"
+    },
+    {
+        "id":  "dfc221e1-4906-4b95-992f-143c8c00c96e",
+        "name":  "Fuel+",
+        "price":  3.52,
+        "unit":  "gal",
+        "icon_name":  "local_gas_station",
+        "created_at":  "2026-03-20T23:59:33.83387+00:00",
+        "updated_at":  "2026-03-20T23:59:33.83387+00:00"
+    },
+    {
+        "id":  "d264023a-e356-440c-ab1a-96b513dde5f9",
+        "name":  "Premium Diesel",
+        "price":  285.50,
+        "unit":  "gal",
+        "icon_name":  null,
+        "created_at":  "2026-03-24T01:01:27.699309+00:00",
+        "updated_at":  "2026-03-24T01:01:27.699309+00:00"
+    },
+    {
+        "id":  "92748bc7-f88f-415a-adcf-ebfec3004c92",
+        "name":  "Hi-Octane 97",
+        "price":  312.20,
+        "unit":  "gal",
+        "icon_name":  null,
+        "created_at":  "2026-03-24T01:01:27.699309+00:00",
+        "updated_at":  "2026-03-24T01:01:27.699309+00:00"
+    },
+    {
+        "id":  "2131ad55-cba4-4d41-a544-60bcded4b18b",
+        "name":  "Super Petrol",
+        "price":  272.10,
+        "unit":  "gal",
+        "icon_name":  null,
+        "created_at":  "2026-03-24T01:01:27.699309+00:00",
+        "updated_at":  "2026-03-24T01:01:27.699309+00:00"
+    }
+]

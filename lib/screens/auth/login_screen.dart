@@ -1,9 +1,29 @@
 import 'package:flutter/material.dart';
-import '../../screens/dashboard/dashboard_screen.dart';
-import 'sign_up_screen.dart';
+import '../../services/supabase_service.dart';
 
-class LoginScreen extends StatelessWidget {
+import 'sign_up_screen.dart';
+import '../../widgets/auth_wrapper.dart';
+
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLoading = false;
+  bool _obscurePassword = true;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,11 +53,38 @@ class LoginScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 48),
-              _buildLabel('Email Address'),
-              _buildTextField('alex@example.com'),
-              const SizedBox(height: 24),
-              _buildLabel('Password'),
-              _buildTextField('Enter your password', isPassword: true),
+              Form(
+                key: _formKey,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildLabel('Email Address'),
+                    _buildTextFormField(
+                      controller: _emailController,
+                      hint: 'alex@example.com',
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) return 'Please enter your email';
+                        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) return 'Please enter a valid email';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    _buildLabel('Password'),
+                    _buildTextFormField(
+                      controller: _passwordController,
+                      hint: 'Enter your password',
+                      isPassword: true,
+                      obscureText: _obscurePassword,
+                      onToggleVisibility: () {
+                        setState(() => _obscurePassword = !_obscurePassword);
+                      },
+                      validator: (value) => value == null || value.isEmpty ? 'Please enter your password' : null,
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 16),
               Align(
                 alignment: Alignment.centerRight,
@@ -57,10 +104,40 @@ class LoginScreen extends StatelessWidget {
                 width: double.infinity,
                 height: 60,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (context) => const DashboardScreen()),
-                    );
+                  onPressed: _isLoading ? null : () async {
+                    if (!_formKey.currentState!.validate()) return;
+
+                    final messenger = ScaffoldMessenger.of(context);
+                    setState(() => _isLoading = true);
+                    try {
+                      debugPrint('Attempting Login for: ${_emailController.text}');
+                      await SupabaseService.signIn(
+                        email: _emailController.text.trim(),
+                        password: _passwordController.text.trim(),
+                      );
+                      debugPrint('Login Successful');
+                      if (context.mounted) {
+                        // Navigate to AuthWrapper which will now see the session and show Dashboard
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(builder: (context) => const AuthWrapper()),
+                          (route) => false,
+                        );
+                      }
+                    } catch (e) {
+                      debugPrint('Login Error: $e');
+                      String errorMessage = e.toString();
+                      if (errorMessage.contains('Invalid login credentials')) {
+                        errorMessage = 'Invalid email or password.';
+                      }
+                      
+                      if (context.mounted) {
+                        messenger.showSnackBar(
+                          SnackBar(content: Text(errorMessage)),
+                        );
+                      }
+                    } finally {
+                      if (mounted) setState(() => _isLoading = false);
+                    }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFF6600),
@@ -70,20 +147,26 @@ class LoginScreen extends StatelessWidget {
                     ),
                     elevation: 0,
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Text(
-                        'Sign In',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                  child: _isLoading 
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Text(
+                            'Sign In',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Icon(Icons.arrow_forward_ios, size: 16),
+                        ],
                       ),
-                      SizedBox(width: 8),
-                      Icon(Icons.arrow_forward_ios, size: 16),
-                    ],
-                  ),
                 ),
               ),
               const SizedBox(height: 48),
@@ -134,20 +217,40 @@ class LoginScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildTextField(String hint, {bool isPassword = false}) {
+  Widget _buildTextFormField({
+    required TextEditingController controller,
+    required String hint,
+    required String? Function(String?) validator,
+    bool isPassword = false,
+    bool obscureText = false,
+    VoidCallback? onToggleVisibility,
+    TextInputType? keyboardType,
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFFF9F9F9),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: TextField(
-        obscureText: isPassword,
+      child: TextFormField(
+        controller: controller,
+        obscureText: isPassword && obscureText,
+        keyboardType: keyboardType,
+        validator: validator,
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: const TextStyle(color: Color(0xFFCCCCCC)),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          suffixIcon: isPassword ? const Icon(Icons.visibility_outlined, color: Colors.grey) : null,
+          suffixIcon: isPassword
+              ? IconButton(
+                  icon: Icon(
+                    obscureText ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                    color: Colors.grey,
+                  ),
+                  onPressed: onToggleVisibility,
+                )
+              : null,
+          errorStyle: const TextStyle(height: 0.8),
         ),
       ),
     );

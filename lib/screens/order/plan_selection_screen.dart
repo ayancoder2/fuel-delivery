@@ -1,7 +1,74 @@
 import 'package:flutter/material.dart';
 
-class PlanSelectionScreen extends StatelessWidget {
+import '../../services/supabase_service.dart';
+
+class PlanSelectionScreen extends StatefulWidget {
   const PlanSelectionScreen({super.key});
+
+  @override
+  State<PlanSelectionScreen> createState() => _PlanSelectionScreenState();
+}
+
+class _PlanSelectionScreenState extends State<PlanSelectionScreen> {
+  String _selectedPlan = 'Pay-As-You-Go'; // Default fallback
+  bool _isSaving = false;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchCurrentPlan();
+  }
+
+  Future<void> _fetchCurrentPlan() async {
+    final user = SupabaseService.currentUser;
+    if (user != null) {
+      try {
+        final profileData = await SupabaseService.getProfile(user.id);
+        if (profileData != null && profileData['subscription_plan'] != null) {
+          if (mounted) {
+            setState(() {
+              _selectedPlan = profileData['subscription_plan'];
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint('Error fetching plan: $e');
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _savePlan() async {
+    final user = SupabaseService.currentUser;
+    if (user != null) {
+      setState(() => _isSaving = true);
+      try {
+        await SupabaseService.updateProfile(
+          userId: user.id,
+          subscriptionPlan: _selectedPlan,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Plan updated successfully!'), backgroundColor: Colors.green),
+          );
+          Navigator.of(context).pop();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error updating plan: $e'), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isSaving = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,8 +111,10 @@ class PlanSelectionScreen extends StatelessWidget {
         ),
         centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        child: Padding(
+      body: _isLoading 
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF6600)))
+          : SingleChildScrollView(
+              child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -68,19 +137,23 @@ class PlanSelectionScreen extends StatelessWidget {
               const SizedBox(height: 32),
 
               // Pay-As-You-Go Plan
-              _buildPlanCard(
-                icon: Icons.flash_on_rounded,
-                iconColor: const Color(0xFF2196F3),
-                title: 'Pay-As-You-Go',
-                subtitle: 'Perfect for occasional fills',
-                price: '\$12',
-                priceSuffix: 'delivery fee',
-                features: [
-                  '\$12 delivery fee',
-                  'Pay only for fuel used',
-                  'Location-based availability',
-                  'No commitment required',
-                ],
+              GestureDetector(
+                onTap: () => setState(() => _selectedPlan = 'Pay-As-You-Go'),
+                child: _buildPlanCard(
+                  icon: Icons.flash_on_rounded,
+                  iconColor: const Color(0xFF2196F3),
+                  title: 'Pay-As-You-Go',
+                  subtitle: 'Perfect for occasional fills',
+                  price: '\$12',
+                  priceSuffix: 'delivery fee',
+                  features: [
+                    '\$12 delivery fee',
+                    'Pay only for fuel used',
+                    'Location-based availability',
+                    'No commitment required',
+                  ],
+                  isSelected: _selectedPlan == 'Pay-As-You-Go',
+                ),
               ),
               const SizedBox(height: 24),
 
@@ -88,44 +161,49 @@ class PlanSelectionScreen extends StatelessWidget {
               Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  _buildPlanCard(
-                    icon: Icons.groups_rounded,
-                    iconColor: const Color(0xFFFF6600),
-                    title: 'Family Subscription',
-                    subtitle: 'Great for regular weekly fills',
-                    price: '\$79',
-                    priceSuffix: 'per month',
-                    features: [
-                      'Up to 3 cars included',
-                      'Weekly fill-up per car',
-                      'Service at up to 2 addresses',
-                      'Flexible scheduling',
-                      'Tire pressure check',
-                      'Windshield cleaning',
-                    ],
-                    isSelected: true,
+                  GestureDetector(
+                    onTap: () => setState(() => _selectedPlan = 'Family Subscription'),
+                    child: _buildPlanCard(
+                      icon: Icons.groups_rounded,
+                      iconColor: const Color(0xFFFF6600),
+                      title: 'Family Subscription',
+                      subtitle: 'Great for regular weekly fills',
+                      price: '\$79',
+                      priceSuffix: 'per month',
+                      features: [
+                        'Up to 3 cars included',
+                        'Weekly fill-up per car',
+                        'Service at up to 2 addresses',
+                        'Flexible scheduling',
+                        'Tire pressure check',
+                        'Windshield cleaning',
+                      ],
+                      isSelected: _selectedPlan == 'Family Subscription',
+                    ),
                   ),
                   Positioned(
                     top: -12,
                     left: 0,
                     right: 0,
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFF6600),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          'MOST POPULAR',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
+                    child: IgnorePointer(
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF6600),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text(
+                            'MOST POPULAR',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
                           ),
                         ),
                       ),
@@ -136,23 +214,27 @@ class PlanSelectionScreen extends StatelessWidget {
               const SizedBox(height: 24),
 
               // Family Elite Plan
-              _buildPlanCard(
-                icon: Icons.workspace_premium_rounded,
-                iconColor: const Color(0xFF9C27B0),
-                title: 'Family Elite',
-                subtitle: 'Premium service for busy families',
-                price: '\$129',
-                priceSuffix: 'per month',
-                features: [
-                  'Up to 4 cars included',
-                  'Up to 3 fill-ups per week per car',
-                  'Service at up to 3 addresses',
-                  'Same-day fill-up available',
-                  'Possible gas discount',
-                  '4th car included free',
-                  'Priority support',
-                  'All standard services',
-                ],
+              GestureDetector(
+                onTap: () => setState(() => _selectedPlan = 'Family Elite'),
+                child: _buildPlanCard(
+                  icon: Icons.workspace_premium_rounded,
+                  iconColor: const Color(0xFF9C27B0),
+                  title: 'Family Elite',
+                  subtitle: 'Premium service for busy families',
+                  price: '\$129',
+                  priceSuffix: 'per month',
+                  features: [
+                    'Up to 4 cars included',
+                    'Up to 3 fill-ups per week per car',
+                    'Service at up to 3 addresses',
+                    'Same-day fill-up available',
+                    'Possible gas discount',
+                    '4th car included free',
+                    'Priority support',
+                    'All standard services',
+                  ],
+                  isSelected: _selectedPlan == 'Family Elite',
+                ),
               ),
               const SizedBox(height: 32),
 
@@ -189,38 +271,44 @@ class PlanSelectionScreen extends StatelessWidget {
           ),
         ),
       ),
-      bottomSheet: Container(
+      bottomSheet: _isLoading ? const SizedBox.shrink() : Container(
         padding: const EdgeInsets.all(24),
         color: Colors.white,
         child: SizedBox(
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
-            onPressed: () {},
+            onPressed: _isSaving ? null : _savePlan,
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFE0E0E0),
+              backgroundColor: const Color(0xFFFF6600),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
-              elevation: 0,
+              elevation: 4,
+              shadowColor: const Color(0xFFFF6600).withAlpha(100),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Text(
-                  'Continue',
-                  style: TextStyle(
-                    color: Color(0xFF888888),
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+              children: [
+                if (_isSaving)
+                  const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                else
+                  const Text(
+                    'Continue',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
-                ),
-                SizedBox(width: 8),
-                Icon(
-                  Icons.arrow_forward_rounded,
-                  color: Color(0xFF888888),
-                  size: 20,
-                ),
+                if (!_isSaving) ...[
+                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.arrow_forward_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ],
               ],
             ),
           ),

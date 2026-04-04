@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../services/supabase_service.dart';
 
 class AddVehicleScreen extends StatefulWidget {
-  const AddVehicleScreen({super.key});
+  final Map<String, dynamic>? initialVehicle;
+  const AddVehicleScreen({super.key, this.initialVehicle});
 
   @override
   State<AddVehicleScreen> createState() => _AddVehicleScreenState();
@@ -16,6 +18,8 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   String _selectedType = 'Sedan';
   String _selectedFuel = 'Regular';
   Color _selectedColor = Colors.white;
+  bool _isEditing = false;
+  bool _isSaving = false;
 
   final List<Map<String, dynamic>> _vehicleTypes = [
     {'name': 'Sedan', 'icon': Icons.directions_car},
@@ -56,6 +60,36 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.initialVehicle != null) {
+      _isEditing = true;
+      final v = widget.initialVehicle!;
+      _nicknameController.text = v['make'] ?? ''; // Using make as nickname for now or add nickname field if exists
+      _plateController.text = v['license_plate'] ?? '';
+      _makeController.text = v['make'] ?? '';
+      _modelController.text = v['model'] ?? '';
+      _selectedType = v['type'] ?? 'Sedan';
+      _selectedFuel = v['fuel_type'] ?? 'Regular';
+      _selectedColor = _parseColor(v['color']);
+    }
+  }
+
+  Color _parseColor(String? colorName) {
+    if (colorName == null) return Colors.white;
+    switch (colorName.toLowerCase()) {
+      case 'white': return Colors.white;
+      case 'black': return const Color(0xFF0F172A);
+      case 'gray': case 'grey': return const Color(0xFF94A3B8);
+      case 'red': return const Color(0xFFDC2626);
+      case 'blue': return const Color(0xFF2563EB);
+      case 'green': return const Color(0xFF059669);
+      case 'yellow': return const Color(0xFFFBBF24);
+      default: return Colors.white;
+    }
+  }
+
+  @override
   void dispose() {
     _nicknameController.dispose();
     _plateController.dispose();
@@ -80,9 +114,9 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
           ),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Add Vehicle',
-          style: TextStyle(
+        title: Text(
+          _isEditing ? 'Edit Vehicle' : 'Add Vehicle',
+          style: const TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
             fontSize: 18,
@@ -135,7 +169,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
+                            color: Colors.black.withAlpha(12),
                             blurRadius: 4,
                             offset: const Offset(0, 2),
                           ),
@@ -154,7 +188,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
               ),
             ),
             const SizedBox(height: 32),
-            _buildSectionHeader('Vehicle Name/Nickname'),
+            _buildSectionHeader('Vehicle Nickname'),
             const SizedBox(height: 12),
             _buildTextField(
               controller: _nicknameController,
@@ -243,7 +277,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
               boxShadow: isSelected
                   ? [
                       BoxShadow(
-                        color: const Color(0xFFFF6600).withValues(alpha: 0.3),
+                        color: const Color(0xFFFF6600).withAlpha(76),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -337,7 +371,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: const Color(0xFFFF6600).withValues(alpha: 0.05),
+                    color: const Color(0xFFFF6600).withAlpha(12),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -434,16 +468,10 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
               color: Colors.white,
               shape: BoxShape.circle,
             ),
-            child: Image.network(
-              'https://cdn-icons-png.flaticon.com/512/3064/3064197.png', // Lock icon placeholder
-              width: 20,
-              height: 20,
-              color: const Color(0xFFB8C089),
-              errorBuilder: (context, error, stackTrace) => const Icon(
-                Icons.lock_rounded,
-                size: 20,
-                color: Color(0xFFB8C089),
-              ),
+            child: const Icon(
+              Icons.lock_rounded,
+              size: 20,
+              color: Color(0xFFB8C089),
             ),
           ),
           const SizedBox(width: 16),
@@ -481,13 +509,64 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         _plateController.text.isNotEmpty &&
         _nicknameController.text.isNotEmpty &&
         _makeController.text.isNotEmpty &&
-        _modelController.text.isNotEmpty;
+        _modelController.text.isNotEmpty &&
+        !_isSaving;
 
     return SizedBox(
       width: double.infinity,
       height: 62,
       child: ElevatedButton(
-        onPressed: isEnabled ? () => Navigator.pop(context) : null,
+        onPressed: isEnabled ? () async {
+          if (_isSaving) return;
+          setState(() => _isSaving = true);
+          
+          final user = SupabaseService.currentUser;
+          if (user != null) {
+            try {
+              String colorString = _selectedColor == Colors.white ? 'White' : 
+                                  _selectedColor == const Color(0xFF0F172A) ? 'Black' :
+                                  _selectedColor == const Color(0xFF94A3B8) ? 'Gray' :
+                                  _selectedColor == const Color(0xFFDC2626) ? 'Red' :
+                                  _selectedColor == const Color(0xFF2563EB) ? 'Blue' :
+                                  _selectedColor == const Color(0xFF059669) ? 'Green' : 'Yellow';
+
+              if (_isEditing) {
+                await SupabaseService.updateVehicle(
+                  vehicleId: widget.initialVehicle!['id'],
+                  make: _makeController.text,
+                  model: _modelController.text,
+                  plate: _plateController.text,
+                  color: colorString,
+                  fuelType: _selectedFuel,
+                  type: _selectedType,
+                );
+              } else {
+                await SupabaseService.addVehicle(
+                  userId: user.id,
+                  make: _makeController.text,
+                  model: _modelController.text,
+                  plate: _plateController.text,
+                  color: colorString,
+                  fuelType: _selectedFuel,
+                  type: _selectedType,
+                );
+              }
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(_isEditing ? 'Vehicle updated successfully!' : 'Vehicle added successfully!')),
+              );
+              Navigator.pop(context);
+            } catch (e) {
+              if (!mounted) return;
+              setState(() => _isSaving = false);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error: $e')),
+              );
+            }
+          } else {
+            setState(() => _isSaving = false);
+          }
+        } : null,
         style: ElevatedButton.styleFrom(
           backgroundColor: isEnabled
               ? const Color(0xFFFF6600)
@@ -495,23 +574,29 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
           disabledBackgroundColor: const Color(0xFFE2E8F0),
           foregroundColor: isEnabled ? Colors.white : const Color(0xFF94A3B8),
           elevation: isEnabled ? 4 : 0,
-          shadowColor: const Color(0xFFFF6600).withValues(alpha: 0.4),
+          shadowColor: const Color(0xFFFF6600).withAlpha(102),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
           ),
         ),
-        child: Row(
+        child: _isSaving 
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+              )
+            : Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.check,
+              _isEditing ? Icons.save : Icons.check,
               size: 22,
               color: isEnabled ? Colors.white : const Color(0xFF94A3B8),
             ),
             const SizedBox(width: 10),
-            const Text(
-              'Save Vehicle',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            Text(
+              _isEditing ? 'Update Vehicle' : 'Save Vehicle',
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
             ),
           ],
         ),

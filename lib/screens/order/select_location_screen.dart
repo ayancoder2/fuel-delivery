@@ -1,9 +1,46 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'order_summary_screen.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:async';
+import '../../services/supabase_service.dart';
 
 class SelectLocationScreen extends StatefulWidget {
-  const SelectLocationScreen({super.key});
+  final String vehicleName;
+  final String locationName;
+  final String fuelType;
+  final String quantity;
+  final String amount;
+  final String subtotal;
+  final String discount;
+  final String? couponCode;
+  final bool useWallet;
+  final double latitude;
+  final double longitude;
+  final String? vehicleId;
+  final DateTime scheduledDate;
+  final String scheduledTimeSlot;
+  final String? notes;
+
+  const SelectLocationScreen({
+    super.key,
+    required this.vehicleName,
+    required this.locationName,
+    required this.latitude,
+    required this.longitude,
+    required this.fuelType,
+    required this.quantity,
+    required this.amount,
+    required this.subtotal,
+    required this.discount,
+    required this.scheduledDate,
+    required this.scheduledTimeSlot,
+    this.couponCode,
+    this.useWallet = false,
+    this.vehicleId,
+    this.notes,
+  });
 
   @override
   State<SelectLocationScreen> createState() => _SelectLocationScreenState();
@@ -11,172 +48,125 @@ class SelectLocationScreen extends StatefulWidget {
 
 class _SelectLocationScreenState extends State<SelectLocationScreen> {
   GoogleMapController? _mapController;
+  final TextEditingController _searchController = TextEditingController();
+  List<dynamic> _searchResults = [];
+  bool _isSearching = false;
+  Timer? _debounce;
+  late String _currentAddress;
+  late LatLng _selectedLatLng;
   
-  // Silver Style JSON for a clean "Indrive" look
-  final String _mapStyle = '''
-[
-  {
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#f5f5f5"
-      }
-    ]
-  },
-  {
-    "elementType": "labels.icon",
-    "stylers": [
-      {
-        "visibility": "off"
-      }
-    ]
-  },
-  {
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#616161"
-      }
-    ]
-  },
-  {
-    "elementType": "labels.text.stroke",
-    "stylers": [
-      {
-        "color": "#f5f5f5"
-      }
-    ]
-  },
-  {
-    "featureType": "administrative.land_parcel",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#bdbdbd"
-      }
-    ]
-  },
-  {
-    "featureType": "poi",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#eeeeee"
-      }
-    ]
-  },
-  {
-    "featureType": "poi",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#757575"
-      }
-    ]
-  },
-  {
-    "featureType": "poi.park",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#e5e5e5"
-      }
-    ]
-  },
-  {
-    "featureType": "poi.park",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#9e9e9e"
-      }
-    ]
-  },
-  {
-    "featureType": "road",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#ffffff"
-      }
-    ]
-  },
-  {
-    "featureType": "road.arterial",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#757575"
-      }
-    ]
-  },
-  {
-    "featureType": "road.highway",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#dadada"
-      }
-    ]
-  },
-  {
-    "featureType": "road.highway",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#616161"
-      }
-    ]
-  },
-  {
-    "featureType": "road.local",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#9e9e9e"
-      }
-    ]
-  },
-  {
-    "featureType": "transit.line",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#e5e5e5"
-      }
-    ]
-  },
-  {
-    "featureType": "transit.station",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#eeeeee"
-      }
-    ]
-  },
-  {
-    "featureType": "water",
-    "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#c9c9c9"
-      }
-    ]
-  },
-  {
-    "featureType": "water",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#9e9e9e"
-      }
-    ]
-  }
-]
-''';
+  // Standard Map styling is used instead of _mapStyle to prevent blank rendering in rural areas.
 
-  final LatLng _initialPosition = const LatLng(37.7749, -122.4194); // San Francisco example
+  String? _subscriptionPlan;
+  bool _isLoadingProfile = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentAddress = widget.locationName;
+    _selectedLatLng = LatLng(widget.latitude, widget.longitude);
+    _searchController.text = widget.locationName;
+    _fetchProfile();
+  }
+
+  Future<void> _fetchProfile() async {
+    final user = SupabaseService.currentUser;
+    if (user != null) {
+      try {
+        final profile = await SupabaseService.getProfile(user.id);
+        if (mounted && profile != null) {
+          setState(() {
+            _subscriptionPlan = profile['subscription_plan'];
+            _isLoadingProfile = false;
+          });
+          return;
+        }
+      } catch (e) {
+        debugPrint('Error fetching profile: $e');
+      }
+    }
+    if (mounted) {
+      setState(() => _isLoadingProfile = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 1000), () {
+      if (query.isNotEmpty) {
+        _searchLocations(query);
+      } else {
+        setState(() {
+          _searchResults = [];
+          _isSearching = false;
+        });
+      }
+    });
+  }
+
+  Future<void> _searchLocations(String query) async {
+    setState(() {
+      _isSearching = true;
+    });
+
+    try {
+      final response = await http.get(
+        Uri.parse('https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(query)}&format=json&limit=5'),
+        headers: {'User-Agent': 'FuelDirectApp'},
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _searchResults = json.decode(response.body);
+          _isSearching = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Search error: $e');
+      setState(() => _isSearching = false);
+    }
+  }
+
+  void _selectLocation(dynamic result) {
+    final double lat = double.parse(result['lat']);
+    final double lon = double.parse(result['lon']);
+    final LatLng position = LatLng(lat, lon);
+
+    setState(() {
+      _selectedLatLng = position;
+      _currentAddress = result['display_name'];
+      _searchResults = [];
+      _isSearching = false;
+      _searchController.text = result['display_name'];
+    });
+
+    _mapController?.animateCamera(CameraUpdate.newLatLngZoom(position, 15));
+  }
+
+  Future<void> _reverseGeocode(LatLng position) async {
+    try {
+      final response = await http.get(
+        Uri.parse('https://nominatim.openstreetmap.org/reverse?lat=${position.latitude}&lon=${position.longitude}&format=json'),
+        headers: {'User-Agent': 'FuelDirectApp'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          _currentAddress = data['display_name'] ?? 'Unknown Location';
+        });
+      }
+    } catch (e) {
+      debugPrint('Reverse geocode error: $e');
+    }
+  }
 
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
@@ -192,14 +182,20 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
             child: GoogleMap(
               onMapCreated: _onMapCreated,
               initialCameraPosition: CameraPosition(
-                target: _initialPosition,
+                target: LatLng(widget.latitude, widget.longitude),
                 zoom: 15,
               ),
-              style: _mapStyle,
+              // style: _mapStyle, // Removed to allow standard map labels and colors to show
               zoomControlsEnabled: false,
               myLocationButtonEnabled: false,
               compassEnabled: false,
               mapToolbarEnabled: false,
+              onCameraMove: (position) {
+                _selectedLatLng = position.target;
+              },
+              onCameraIdle: () {
+                _reverseGeocode(_selectedLatLng);
+              },
             ),
           ),
           
@@ -248,35 +244,82 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
             top: 130,
             left: 24,
             right: 24,
-            child: Container(
-              height: 56,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(15),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: const [
-                  Icon(Icons.search, color: Color(0xFFAAAAAA), size: 24),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Search for a different location..',
-                        hintStyle: TextStyle(color: Color(0xFFAAAAAA), fontSize: 14),
-                        border: InputBorder.none,
+            child: Column(
+              children: [
+                Container(
+                  height: 56,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(15),
+                        blurRadius: 15,
+                        offset: const Offset(0, 5),
                       ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.search, color: Color(0xFFAAAAAA), size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: _onSearchChanged,
+                          decoration: const InputDecoration(
+                            hintText: 'Search for a different location..',
+                            hintStyle: TextStyle(color: Color(0xFFAAAAAA), fontSize: 14),
+                            border: InputBorder.none,
+                          ),
+                        ),
+                      ),
+                      if (_isSearching)
+                        const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF6600)),
+                        ),
+                    ],
+                  ),
+                ),
+                if (_searchResults.isNotEmpty)
+                  Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withAlpha(15),
+                          blurRadius: 15,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    constraints: const BoxConstraints(maxHeight: 250),
+                    child: ListView.separated(
+                      padding: EdgeInsets.zero,
+                      shrinkWrap: true,
+                      itemCount: _searchResults.length,
+                      separatorBuilder: (context, index) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final result = _searchResults[index];
+                        return ListTile(
+                          leading: const Icon(Icons.location_on_outlined, color: Color(0xFFFF6600)),
+                          title: Text(
+                            result['display_name'],
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                          onTap: () => _selectLocation(result),
+                        );
+                      },
                     ),
                   ),
-                ],
-              ),
+              ],
             ),
           ),
 
@@ -322,9 +365,8 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
               child: IconButton(
                 icon: const Icon(Icons.my_location, color: Colors.black, size: 24),
                 onPressed: () {
-                  // In a real app, this would use geolocator to move the map
-                  _mapController?.animateCamera(
-                    CameraUpdate.newLatLng(_initialPosition),
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('GPS Auto-location is mocked in this demo.')),
                   );
                 },
               ),
@@ -365,11 +407,13 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          '123 Innovation Drive',
-                          style: TextStyle(
-                            fontSize: 20,
+                          _currentAddress,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 16,
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF333333),
                           ),
@@ -378,13 +422,7 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                       const Icon(Icons.edit_outlined, size: 20, color: Color(0xFF333333)),
                     ],
                   ),
-                  const Text(
-                    'San Francisco, CA 94105',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFFAAAAAA),
-                    ),
-                  ),
+                  // Removed hardcoded San Francisco address text
                   const SizedBox(height: 20),
                   Row(
                     children: [
@@ -424,43 +462,7 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFF5F0),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFFFFECE0),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(Icons.directions_car_filled, size: 16, color: Color(0xFFFF6600)),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  const Text(
-                                    'SERVICE FEE',
-                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF666666)),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                '\$4.99',
-                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF333333)),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -468,9 +470,31 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: () {
+                      onPressed: _isLoadingProfile ? null : () {
+                        double parsedAmount = double.tryParse(widget.amount.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
+                        double serviceFee = (_subscriptionPlan == 'Family Subscription' || _subscriptionPlan == 'Family Elite') ? 0.0 : 4.99;
+                        double finalAmount = parsedAmount + serviceFee;
+
                         Navigator.of(context).push(
-                          MaterialPageRoute(builder: (context) => const OrderSummaryScreen()),
+                          MaterialPageRoute(
+                            builder: (context) => OrderSummaryScreen(
+                              vehicleName: widget.vehicleName,
+                              locationName: _currentAddress,
+                              fuelType: widget.fuelType,
+                              quantity: widget.quantity,
+                              subtotal: widget.subtotal,
+                              discount: widget.discount,
+                              amount: '\$${finalAmount.toStringAsFixed(2)}',
+                              couponCode: widget.couponCode,
+                              useWallet: widget.useWallet,
+                              vehicleId: widget.vehicleId,
+                              scheduledDate: widget.scheduledDate,
+                              scheduledTimeSlot: widget.scheduledTimeSlot,
+                              notes: widget.notes,
+                              latitude: _selectedLatLng.latitude,
+                              longitude: _selectedLatLng.longitude,
+                            ),
+                          ),
                         );
                       },
                       style: ElevatedButton.styleFrom(
