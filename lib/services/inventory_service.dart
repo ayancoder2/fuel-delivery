@@ -10,7 +10,20 @@ class InventoryService {
           .from('fuel_prices')
           .select()
           .order('name');
-      return List<Map<String, dynamic>>.from(data);
+      
+      final List<Map<String, dynamic>> allPrices = List<Map<String, dynamic>>.from(data);
+      final List<Map<String, dynamic>> uniquePrices = [];
+      final Set<String> seenNames = {};
+
+      for (var fuel in allPrices) {
+        final name = fuel['name'] as String;
+        if (!seenNames.contains(name)) {
+          seenNames.add(name);
+          uniquePrices.add(fuel);
+        }
+      }
+
+      return uniquePrices;
     } catch (e) {
       return [];
     }
