@@ -4,7 +4,8 @@ import 'order_summary_screen.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
-import '../../services/supabase_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/profile_service.dart';
 
 class SelectLocationScreen extends StatefulWidget {
   final String vehicleName;
@@ -15,6 +16,7 @@ class SelectLocationScreen extends StatefulWidget {
   final String subtotal;
   final String discount;
   final String? couponCode;
+  final String? discountId;
   final bool useWallet;
   final double latitude;
   final double longitude;
@@ -37,6 +39,7 @@ class SelectLocationScreen extends StatefulWidget {
     required this.scheduledDate,
     required this.scheduledTimeSlot,
     this.couponCode,
+    this.discountId,
     this.useWallet = false,
     this.vehicleId,
     this.notes,
@@ -64,16 +67,17 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
   void initState() {
     super.initState();
     _currentAddress = widget.locationName;
+    
     _selectedLatLng = LatLng(widget.latitude, widget.longitude);
     _searchController.text = widget.locationName;
     _fetchProfile();
   }
 
   Future<void> _fetchProfile() async {
-    final user = SupabaseService.currentUser;
+    final user = AuthService.currentUser;
     if (user != null) {
       try {
-        final profile = await SupabaseService.getProfile(user.id);
+        final profile = await ProfileService.getProfile(user.id);
         if (mounted && profile != null) {
           setState(() {
             _subscriptionPlan = profile['subscription_plan'];
@@ -472,7 +476,9 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                     child: ElevatedButton(
                       onPressed: _isLoadingProfile ? null : () {
                         double parsedAmount = double.tryParse(widget.amount.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
-                        double serviceFee = (_subscriptionPlan == 'Family Subscription' || _subscriptionPlan == 'Family Elite') ? 0.0 : 4.99;
+                        // Pay-As-You-Go: $12 delivery fee. Subscription plans: free delivery.
+                        final bool hasSubscription = _subscriptionPlan == 'Family Subscription' || _subscriptionPlan == 'Family Elite';
+                        double serviceFee = hasSubscription ? 0.0 : 12.0;
                         double finalAmount = parsedAmount + serviceFee;
 
                         Navigator.of(context).push(
@@ -486,6 +492,7 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                               discount: widget.discount,
                               amount: '\$${finalAmount.toStringAsFixed(2)}',
                               couponCode: widget.couponCode,
+                              discountId: widget.discountId,
                               useWallet: widget.useWallet,
                               vehicleId: widget.vehicleId,
                               scheduledDate: widget.scheduledDate,
@@ -493,6 +500,8 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                               notes: widget.notes,
                               latitude: _selectedLatLng.latitude,
                               longitude: _selectedLatLng.longitude,
+                              // Pass fee so it shows as a line item in the summary
+                              serviceFee: serviceFee > 0 ? serviceFee : null,
                             ),
                           ),
                         );

@@ -38,6 +38,17 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    // Explicitly disable multi-dex issues if they arise (now handled by minSdk 21+)
+    dexOptions {
+        javaMaxHeapSize = "4G"
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
 
 flutter {

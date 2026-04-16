@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../services/supabase_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/financial_service.dart';
 
 class PaymentsScreen extends StatefulWidget {
   const PaymentsScreen({super.key});
@@ -20,9 +21,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   }
 
   Future<void> _loadPaymentMethods() async {
-    final user = SupabaseService.currentUser;
+    final user = AuthService.currentUser;
     if (user != null) {
-      final methods = await SupabaseService.getPaymentMethods(user.id);
+      final methods = await FinancialService.getPaymentMethods(user.id);
       if (mounted) {
         setState(() {
           _paymentMethods = methods;
@@ -35,7 +36,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   Future<void> _deleteCard(String id) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await SupabaseService.deletePaymentMethod(id);
+      await FinancialService.deletePaymentMethod(id);
       if (!context.mounted) return;
       _loadPaymentMethods();
       messenger.showSnackBar(
@@ -352,7 +353,7 @@ class _AddCardSheetState extends State<_AddCardSheet> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    final user = SupabaseService.currentUser;
+    final user = AuthService.currentUser;
     if (user == null) return;
 
     setState(() => _isSaving = true);
@@ -363,7 +364,7 @@ class _AddCardSheetState extends State<_AddCardSheet> {
     final expiry = _expiryController.text.trim();
 
     try {
-      await SupabaseService.addPaymentMethod(
+      await FinancialService.addPaymentMethod(
         userId: user.id,
         cardType: cardType,
         last4: last4,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../services/supabase_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/vehicle_service.dart';
 import '../order/add_vehicle_screen.dart';
 
 class MyVehiclesScreen extends StatefulWidget {
@@ -20,15 +21,17 @@ class _MyVehiclesScreenState extends State<MyVehiclesScreen> {
   }
 
   Future<void> _loadVehicles() async {
-    final user = SupabaseService.currentUser;
+    final user = AuthService.currentUser;
     if (user != null) {
-      final vehicles = await SupabaseService.getVehicles(user.id);
-      setState(() {
-        _vehicles = vehicles;
-        _isLoading = false;
-      });
+      final vehicles = await VehicleService.getVehicles(user.id);
+      if (mounted) {
+        setState(() {
+          _vehicles = vehicles;
+          _isLoading = false;
+        });
+      }
     } else {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -137,7 +140,7 @@ class _MyVehiclesScreenState extends State<MyVehiclesScreen> {
     final String nickname = vehicle['make'] ?? 'Unnamed';
     final String model = vehicle['model'] ?? '';
     final String plate = vehicle['license_plate'] ?? '';
-    final String fuelType = vehicle['fuel_type'] ?? 'Regular';
+    final String fuelType = vehicle['fuel_type'] ?? 'Petrol';
     final Color color = _getColor(vehicle['color']);
     const IconData icon = Icons.directions_car;
 
@@ -222,7 +225,7 @@ class _MyVehiclesScreenState extends State<MyVehiclesScreen> {
                     ),
                   );
                   if (confirm == true) {
-                    await SupabaseService.deleteVehicle(id);
+                    await VehicleService.deleteVehicle(id);
                     _loadVehicles();
                   }
                 },

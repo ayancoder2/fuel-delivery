@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../services/supabase_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/order_service.dart';
+import '../../services/financial_service.dart';
+import '../../services/inventory_service.dart';
+import '../../services/notification_service.dart';
 import 'order_tracking_screen.dart';
 
 class OrderSummaryScreen extends StatefulWidget {
@@ -11,6 +15,7 @@ class OrderSummaryScreen extends StatefulWidget {
   final String subtotal;
   final String discount;
   final String? couponCode;
+  final String? discountId;
   final bool useWallet;
   final double latitude;
   final double longitude;
@@ -34,6 +39,7 @@ class OrderSummaryScreen extends StatefulWidget {
     required this.latitude,
     required this.longitude,
     this.couponCode,
+    this.discountId,
     this.useWallet = false,
     this.vehicleId,
     this.notes,
@@ -182,8 +188,9 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                   ),
                   if (widget.serviceFee != null && widget.serviceFee! > 0)
                     _buildInfoRow(
-                      'Service Fee',
+                      'Delivery Fee',
                       '+\$${widget.serviceFee!.toStringAsFixed(2)}',
+                      valueColor: const Color(0xFFFF6600),
                     ),
                   if (widget.couponCode != null)
                     _buildInfoRow(
@@ -285,7 +292,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
           height: 60,
           child: ElevatedButton(
             onPressed: _isPlacingOrder ? null : () async {
-              final user = SupabaseService.currentUser;
+              final user = AuthService.currentUser;
               if (user != null) {
                 setState(() => _isPlacingOrder = true);
                 try {
@@ -295,7 +302,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
 
                   // WALLET DEDUCTION
                   if (widget.useWallet) {
-                    await SupabaseService.processWalletTransaction(
+                    await FinancialService.processWalletTransaction(
                       userId: user.id,
                       amount: total,
                       type: 'PAYMENT',
@@ -303,12 +310,12 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                     );
                   }
 
-                  // COUPON USAGE INCREMENT
-                  if (widget.couponCode != null && widget.couponCode!.isNotEmpty) {
-                    await SupabaseService.incrementCouponUsage(widget.couponCode!);
+                  // DISCOUNT USAGE INCREMENT
+                  if (widget.discountId != null) {
+                    await InventoryService.applyDiscountUsage(widget.discountId!);
                   }
 
-                  final order = await SupabaseService.createOrder(
+                  final order = await OrderService.createOrder(
                     userId: user.id,
                     fuelType: widget.fuelType,
                     quantity: qty,
@@ -318,10 +325,17 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                     lng: widget.longitude,
                     scheduledTime: widget.scheduledDate,
                     vehicleId: widget.vehicleId,
+                    discountId: widget.discountId,
                   );
 
                   if (!context.mounted) return;
                   if (order != null) {
+                    // ── NOTIFICATION: Order Placed ──
+                    NotificationService().showNotification(
+                      id: 1000,
+                      title: '📦 Order Placed!',
+                      body: 'Your fuel order is confirmed. A driver is being assigned.',
+                    );
                     Navigator.of(context).pushAndRemoveUntil(
                       MaterialPageRoute(
                         builder: (context) => OrderTrackingScreen(

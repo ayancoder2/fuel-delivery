@@ -1,7 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../services/supabase_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/profile_service.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -30,10 +31,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _loadProfileData() async {
-    final user = SupabaseService.currentUser;
+    final user = AuthService.currentUser;
     if (user != null) {
       _emailController.text = user.email ?? '';
-      final profile = await SupabaseService.getProfile(user.id);
+      final profile = await ProfileService.getProfile(user.id);
       if (profile != null) {
         if (mounted) {
           setState(() {
@@ -81,7 +82,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     
     setState(() => _isSaving = true);
     
-    final user = SupabaseService.currentUser;
+    final user = AuthService.currentUser;
     if (user == null) return;
 
     final messenger = ScaffoldMessenger.of(context);
@@ -93,10 +94,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (_imageFile != null) {
         final bytes = await _imageFile!.readAsBytes();
         final extension = _imageFile!.path.split('.').last;
-        newAvatarUrl = await SupabaseService.uploadAvatar(user.id, bytes, extension);
+        newAvatarUrl = await ProfileService.uploadAvatar(user.id, bytes, extension);
       }
 
-      await SupabaseService.updateProfile(
+      await ProfileService.updateProfile(
         userId: user.id,
         fullName: _nameController.text.trim(),
         phone: _phoneController.text.trim(),

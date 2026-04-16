@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../services/supabase_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/profile_service.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -48,7 +49,7 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final user = SupabaseService.currentUser;
+      final user = AuthService.currentUser;
       if (user != null) {
         final query = _addressController.text.trim();
         final response = await http.get(
@@ -69,7 +70,7 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
         final double lng = double.parse(data[0]['lon']);
 
         if (_isEditing) {
-          await SupabaseService.updateAddress(
+          await ProfileService.updateAddress(
             addressId: widget.initialAddress!['id'],
             title: _titleController.text.trim(),
             address: query,
@@ -78,7 +79,7 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
             isDefault: _isDefault,
           );
         } else {
-          await SupabaseService.addAddress(
+          await ProfileService.addAddress(
             userId: user.id,
             title: _titleController.text.trim(),
             address: query,

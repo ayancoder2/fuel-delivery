@@ -13,8 +13,11 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Timer(const Duration(seconds: 2), () {
+    debugPrint('BOOT_SEQ: [9] SplashScreen initState()');
+    
+    Timer(const Duration(seconds: 3), () {
       if (mounted) {
+        debugPrint('BOOT_SEQ: [1] SplashScreen timer fired, navigating to AuthWrapper');
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const AuthWrapper()),
         );
@@ -24,6 +27,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('BOOT_SEQ: [10] SplashScreen build()');
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(

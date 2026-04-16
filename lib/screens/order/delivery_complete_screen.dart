@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../dashboard/dashboard_screen.dart';
 
-import '../../services/supabase_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/order_service.dart';
 import '../../services/receipt_service.dart';
 
 class DeliveryCompleteScreen extends StatefulWidget {
@@ -292,12 +293,12 @@ class _DeliveryCompleteScreenState extends State<DeliveryCompleteScreen> {
                 onPressed: _isSubmitting ? null : () async {
                   if (_rating > 0 && widget.orderData != null) {
                     setState(() => _isSubmitting = true);
-                    final user = SupabaseService.currentUser;
+                    final user = AuthService.currentUser;
                     if (user != null) {
-                      await SupabaseService.submitReview(
+                      await OrderService.submitReview(
                         orderId: widget.orderData!['id'],
                         userId: user.id,
-                        rating: _rating,
+                        rating: _rating.toDouble(),
                         feedback: '',
                       );
                     }

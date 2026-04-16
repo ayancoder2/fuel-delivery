@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../services/supabase_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/vehicle_service.dart';
 
 class AddVehicleScreen extends StatefulWidget {
   final Map<String, dynamic>? initialVehicle;
@@ -16,7 +17,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   final TextEditingController _modelController = TextEditingController();
 
   String _selectedType = 'Sedan';
-  String _selectedFuel = 'Regular';
+  String _selectedFuel = 'regular';
   Color _selectedColor = Colors.white;
   bool _isEditing = false;
   bool _isSaving = false;
@@ -38,21 +39,24 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     const Color(0xFFFBBF24), // Amber/Yellow
   ];
 
-  final List<Map<String, String>> _fuelTypes = [
+  final List<Map<String, dynamic>> _fuelTypes = [
     {
-      'id': 'Regular',
+      'id': 'regular',
+      'dbValue': 'Petrol',
       'label': 'Regular',
       'sublabel': 'STANDARD PERFORMANCE',
       'octane': '87',
     },
     {
-      'id': 'Premium',
+      'id': 'premium',
+      'dbValue': 'Petrol',
       'label': 'Premium',
       'sublabel': 'HIGH OCTANE',
       'octane': '93',
     },
     {
-      'id': 'Diesel',
+      'id': 'diesel',
+      'dbValue': 'Diesel',
       'label': 'On-road Diesel',
       'sublabel': 'ULTRA LOW SULFUR',
       'octane': '', // Indicates pump icon
@@ -70,7 +74,9 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
       _makeController.text = v['make'] ?? '';
       _modelController.text = v['model'] ?? '';
       _selectedType = v['type'] ?? 'Sedan';
-      _selectedFuel = v['fuel_type'] ?? 'Regular';
+      final String dbFuel = v['fuel_type'] ?? 'Petrol';
+      _selectedFuel = dbFuel.toLowerCase(); 
+      // Note: Premium distinction is lost on load unless we add more metadata to DB
       _selectedColor = _parseColor(v['color']);
     }
   }
@@ -352,7 +358,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     );
   }
 
-  Widget _buildFuelCard(Map<String, String> fuel) {
+  Widget _buildFuelCard(Map<String, dynamic> fuel) {
     bool isSelected = _selectedFuel == fuel['id'];
     return GestureDetector(
       onTap: () => setState(() => _selectedFuel = fuel['id']!),
@@ -507,7 +513,6 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   Widget _buildSaveButton() {
     bool isEnabled =
         _plateController.text.isNotEmpty &&
-        _nicknameController.text.isNotEmpty &&
         _makeController.text.isNotEmpty &&
         _modelController.text.isNotEmpty &&
         !_isSaving;
@@ -520,7 +525,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
           if (_isSaving) return;
           setState(() => _isSaving = true);
           
-          final user = SupabaseService.currentUser;
+          final user = AuthService.currentUser;
           if (user != null) {
             try {
               String colorString = _selectedColor == Colors.white ? 'White' : 
@@ -531,23 +536,23 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                                   _selectedColor == const Color(0xFF059669) ? 'Green' : 'Yellow';
 
               if (_isEditing) {
-                await SupabaseService.updateVehicle(
+                await VehicleService.updateVehicle(
                   vehicleId: widget.initialVehicle!['id'],
                   make: _makeController.text,
                   model: _modelController.text,
                   plate: _plateController.text,
                   color: colorString,
-                  fuelType: _selectedFuel,
+                  fuelType: _selectedFuel == 'regular' || _selectedFuel == 'premium' ? 'Petrol' : 'Diesel',
                   type: _selectedType,
                 );
               } else {
-                await SupabaseService.addVehicle(
+                await VehicleService.addVehicle(
                   userId: user.id,
                   make: _makeController.text,
                   model: _modelController.text,
                   plate: _plateController.text,
                   color: colorString,
-                  fuelType: _selectedFuel,
+                  fuelType: _selectedFuel == 'regular' || _selectedFuel == 'premium' ? 'Petrol' : 'Diesel',
                   type: _selectedType,
                 );
               }
@@ -560,11 +565,14 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
               if (!mounted) return;
               setState(() => _isSaving = false);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Error: $e')),
+                SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
               );
             }
           } else {
             setState(() => _isSaving = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Error: User session not found. Please log in again.'), backgroundColor: Colors.red),
+            );
           }
         } : null,
         style: ElevatedButton.styleFrom(

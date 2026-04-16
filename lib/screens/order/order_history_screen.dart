@@ -4,7 +4,8 @@ import '../dashboard/dashboard_screen.dart';
 import '../profile/settings_screen.dart';
 import 'add_vehicle_screen.dart';
 import 'order_details_screen.dart';
-import '../../services/supabase_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/order_service.dart';
 
 class OrderHistoryScreen extends StatefulWidget {
   const OrderHistoryScreen({super.key});
@@ -33,9 +34,9 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
   }
 
   Future<void> _loadOrders() async {
-    final user = SupabaseService.currentUser;
+    final user = AuthService.currentUser;
     if (user != null) {
-      final orders = await SupabaseService.getOrders(user.id);
+      final orders = await OrderService.getOrders(user.id);
       if (mounted) {
         setState(() {
           _orders = orders;

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'delivery_complete_screen.dart';
-import '../../services/supabase_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/order_service.dart';
+import '../../services/financial_service.dart';
 import '../../services/driver_simulation_service.dart';
 import '../../services/notification_service.dart';
 import 'dart:async';
@@ -19,15 +22,21 @@ class OrderTrackingScreen extends StatefulWidget {
 
 class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   StreamSubscription? _orderSubscription;
+  Timer? _pollingTimer;
   Map<String, dynamic>? _orderData;
   GoogleMapController? _mapController;
   Set<Marker> _markers = {};
+  Set<Polyline> _polylines = {};
+  BitmapDescriptor? _truckIcon;
+  BitmapDescriptor? _userIcon;
   bool _isLoading = true;
   String? _currentOrderId;
   
-  // Notification flags to prevent spamming
-  bool _hasNotifiedStarted = false;
-  bool _hasNotifiedArrived = false;
+  // Guard to prevent starting simulation multiple times
+  bool _simulationStarted = false;
+
+  // Notification flags — fire each exactly once per order lifecycle
+  bool _hasNotifiedDriverAssigned = false;
   bool _hasNotifiedCompleted = false;
 
   // Silver Style JSON for a clean "Indrive" look
@@ -63,12 +72,30 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   void initState() {
     super.initState();
     _currentOrderId = widget.orderId;
+    _loadCustomIcons();
     _initializeTracking();
+  }
+
+  Future<void> _loadCustomIcons() async {
+    try {
+      _truckIcon = await BitmapDescriptor.asset(
+        const ImageConfiguration(size: Size(48, 48)),
+        'assets/images/truck_marker.png',
+      );
+      _userIcon = await BitmapDescriptor.asset(
+        const ImageConfiguration(size: Size(40, 40)),
+        'assets/images/map.png',
+      );
+    } catch (e) {
+      debugPrint('Error loading custom icons: $e');
+    }
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _orderSubscription?.cancel();
+    _pollingTimer?.cancel();
     if (_currentOrderId != null) {
       DriverSimulationService.stopOrderSimulation(_currentOrderId!);
     }
@@ -76,34 +103,63 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   }
 
   Future<void> _initializeTracking() async {
-    final user = SupabaseService.currentUser;
+    final user = AuthService.currentUser;
     if (user == null) return;
 
     if (_currentOrderId == null) {
-      final activeOrder = await SupabaseService.getActiveOrder(user.id);
+      final activeOrder = await OrderService.getActiveOrder(user.id);
       if (activeOrder != null) {
+        final computed = _computeMarkersAndPolylines(activeOrder);
         setState(() {
           _currentOrderId = activeOrder['id'];
           _orderData = activeOrder;
           _isLoading = false;
+          _markers = computed.$1;
+          _polylines = computed.$2;
         });
+        _animateCameraForOrder(activeOrder);
+
+        // Start simulation if no driver yet
+        // Start simulation if not finished
+        if (!_simulationStarted && activeOrder['status'] != 'DELIVERED') {
+          _simulationStarted = true;
+          DriverSimulationService.startOrderSimulation(
+            activeOrder['id'],
+            LatLng(activeOrder['latitude'], activeOrder['longitude']),
+          );
+        }
       } else {
         setState(() => _isLoading = false);
       }
     } else {
       // If we have an ID, fetch it once to show data immediately
       try {
-        final order = await SupabaseService.client
+        final order = await Supabase.instance.client
             .from('orders')
             .select('*, vehicles(make, model, license_plate)')
             .eq('id', _currentOrderId!)
             .single();
         
+        // Compute markers BEFORE setState to avoid nested setState
+        final computed = _computeMarkersAndPolylines(order);
         setState(() {
           _orderData = order;
           _isLoading = false;
-          _updateMarkers();
+          _markers = computed.$1;
+          _polylines = computed.$2;
         });
+
+        // Animate camera AFTER setState (safe outside)
+        _animateCameraForOrder(order);
+
+        // Trigger simulation if not finished
+        if (!_simulationStarted && order['status'] != 'DELIVERED' && order['latitude'] != null) {
+          _simulationStarted = true;
+           DriverSimulationService.startOrderSimulation(
+             _currentOrderId!, 
+             LatLng(order['latitude'], order['longitude']),
+           );
+        }
       } catch (e) {
         debugPrint('Error fetching order initially: $e');
         // fall back to stream only, but turn off loading after a delay if still empty
@@ -112,110 +168,171 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
         });
       }
     }
-
     if (_currentOrderId != null) {
-      _orderSubscription = SupabaseService.getOrderStream(_currentOrderId!).listen((orders) {
+      // 1. Live Stream Listener
+      _orderSubscription = OrderService.getOrderStream(_currentOrderId!).listen((orders) {
+        debugPrint('TRACKING: Received Stream Update for $_currentOrderId');
         if (orders.isNotEmpty) {
-          final newOrderData = orders.first;
-          final String status = newOrderData['status'] ?? 'PENDING';
-          final double? driverLat = newOrderData['driver_latitude']?.toDouble();
+          _updateUIWithNewData(orders.first);
+        }
+      });
+
+      // 2. Polling Fallback (In case Realtime is not enabled in Supabase)
+      _pollingTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+        try {
+          final order = await Supabase.instance.client
+              .from('orders')
+              .select('*, vehicles(make, model, license_plate)')
+              .eq('id', _currentOrderId!)
+              .single();
           
           if (mounted) {
-            setState(() {
-              _orderData = newOrderData;
-              _isLoading = false;
-              _updateMarkers();
-            });
+            debugPrint('TRACKING: Received Polling Update for $_currentOrderId (Status: ${order['status']})');
+            _updateUIWithNewData(order);
           }
-
-          // 1. Notification: Driver Started Journey
-          if (!_hasNotifiedStarted && driverLat != null) {
-            _hasNotifiedStarted = true;
-            NotificationService().showNotification(
-              title: 'Driver is on the way! 🚛',
-              body: 'Your fuel delivery driver ${newOrderData['driver_name'] ?? ''} has started moving towards you.',
-            );
-          }
-
-          // 2. Notification: Driver Arrived (Simulated by distance or status)
-          // Since it's a simulation, we'll check if status is 'ARRIVED' or 'DELIVERED' or 'DELIVERING'
-          if (!_hasNotifiedArrived && (status == 'DELIVERING' || status == 'ARRIVED')) {
-            _hasNotifiedArrived = true;
-            NotificationService().showNotification(
-              title: 'Driver has arrived! 📍',
-              body: 'The fuel tanker is at your delivery location. Please ready your vehicle.',
-            );
-          }
-
-          // 3. Notification: Order Completed
-          if (!_hasNotifiedCompleted && status == 'DELIVERED') {
-            _hasNotifiedCompleted = true;
-            
-            // Award Loyalty Points
-            final double totalPrice = (newOrderData['total_price'] ?? 0.0).toDouble();
-            if (totalPrice > 0) {
-              SupabaseService.awardLoyaltyPoints(newOrderData['user_id'], totalPrice);
-            }
-
-            NotificationService().showNotification(
-              title: 'Delivery Complete! ✅',
-              body: 'Your fuel has been successfully delivered. Check your history for the receipt.',
-            );
-          }
-
-          // Trigger simulation if driver is not yet assigned locally
-          if (newOrderData['driver_latitude'] == null && newOrderData['latitude'] != null) {
-             DriverSimulationService.startOrderSimulation(
-               _currentOrderId!, 
-               LatLng(newOrderData['latitude'], newOrderData['longitude']),
-             );
-          }
+        } catch (e) {
+          debugPrint('TRACKING POLLING ERROR: $e');
         }
       });
     }
   }
 
-  void _updateMarkers() {
-    if (_orderData == null) return;
+  void _updateUIWithNewData(Map<String, dynamic> newOrderData) {
+    if (!mounted) return;
+    
+    final String status = newOrderData['status'] ?? 'PENDING';
+    
+    // Compute markers before calling setState
+    final computed = _computeMarkersAndPolylines(newOrderData);
+    setState(() {
+      _orderData = newOrderData;
+      _isLoading = false;
+      _markers = computed.$1;
+      _polylines = computed.$2;
+    });
 
+    // Animate camera to follow driver if available, otherwise destination
+    if (newOrderData['driver_latitude'] != null) {
+      _animateCameraForOrder(newOrderData);
+    } else {
+      _animateCameraForOrder(newOrderData); // Still centers on destination initially
+    }
+
+    // ── NOTIFICATION: Driver Assigned ──
+    if (!_hasNotifiedDriverAssigned && newOrderData['driver_latitude'] != null) {
+      _hasNotifiedDriverAssigned = true;
+      final driverName = newOrderData['driver_name'] ?? 'Your driver';
+      NotificationService().showNotification(
+        id: 1001,
+        title: '🚚 Driver Assigned!',
+        body: '$driverName is on the way to you. Track in real-time.',
+      );
+    }
+
+    // ── NOTIFICATION: Order Delivered ──
+    if (!_hasNotifiedCompleted && status == 'DELIVERED') {
+      _hasNotifiedCompleted = true;
+      NotificationService().showNotification(
+        id: 1002,
+        title: '✅ Fuel Delivered!',
+        body: 'Your fuel has been delivered. Enjoy the ride! 🛣️',
+      );
+    }
+
+    // Ensure simulation is running
+    if (!_simulationStarted && status != 'DELIVERED') {
+      _simulationStarted = true;
+      DriverSimulationService.startOrderSimulation(
+        _currentOrderId!, 
+        LatLng(newOrderData['latitude'] ?? 30.3753, newOrderData['longitude'] ?? 69.3451),
+      );
+    }
+  }
+
+  double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+    var p = 0.017453292519943295;
+    var c = cos;
+    var a = 0.5 - c((lat2 - lat1) * p) / 2 + 
+          c(lat1 * p) * c(lat2 * p) * 
+          (1 - c((lon2 - lon1) * p)) / 2;
+    return 12742 * asin(sqrt(a));
+  }
+
+  /// Computes markers and polylines from order data WITHOUT calling setState.
+  /// Returns a record of (markers, polylines).
+  (Set<Marker>, Set<Polyline>) _computeMarkersAndPolylines(Map<String, dynamic> data) {
     Set<Marker> newMarkers = {};
+    Set<Polyline> newPolylines = {};
+
+    final double? userLat = data['latitude']?.toDouble();
+    final double? userLng = data['longitude']?.toDouble();
+    final double? driverLat = data['driver_latitude']?.toDouble();
+    final double? driverLng = data['driver_longitude']?.toDouble();
 
     // Destination Marker (User)
-    if (_orderData!['latitude'] != null && _orderData!['longitude'] != null) {
+    if (userLat != null && userLng != null) {
       newMarkers.add(
         Marker(
           markerId: const MarkerId('destination'),
-          position: LatLng(_orderData!['latitude'], _orderData!['longitude']),
+          position: LatLng(userLat, userLng),
           infoWindow: const InfoWindow(title: 'Your Delivery Spot'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+          icon: _userIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
         ),
       );
     }
 
     // Driver Marker (Moving Truck)
-    if (_orderData!['driver_latitude'] != null && _orderData!['driver_longitude'] != null) {
+    if (driverLat != null && driverLng != null) {
       newMarkers.add(
         Marker(
           markerId: const MarkerId('driver'),
-          position: LatLng(_orderData!['driver_latitude'], _orderData!['driver_longitude']),
+          position: LatLng(driverLat, driverLng),
           infoWindow: const InfoWindow(title: 'Fuel Tanker'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-          rotation: Random().nextDouble() * 360, // Simple rotation effect
+          icon: _truckIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          anchor: const Offset(0.5, 0.5),
         ),
       );
 
-      // Camera follows the driver smoothly
-      if (_mapController != null) {
-        _mapController!.animateCamera(
-          CameraUpdate.newLatLng(
-            LatLng(_orderData!['driver_latitude'], _orderData!['driver_longitude']),
+      // Add Polyline if we have both points
+      if (userLat != null && userLng != null) {
+        newPolylines.add(
+          Polyline(
+            polylineId: const PolylineId('route'),
+            points: [LatLng(driverLat, driverLng), LatLng(userLat, userLng)],
+            color: const Color(0xFFFF6600),
+            width: 4,
+            patterns: [PatternItem.dash(10), PatternItem.gap(5)],
           ),
         );
+
+        // Update estimated ETA based on distance
+        final distanceKm = _calculateDistance(driverLat, driverLng, userLat, userLng);
+        data['estimated_minutes'] = (distanceKm * 2.5).ceil();
       }
     }
 
-    setState(() => _markers = newMarkers);
+    return (newMarkers, newPolylines);
   }
+
+  /// Animates the map camera based on driver/user position. Safe to call outside setState.
+  void _animateCameraForOrder(Map<String, dynamic> data) {
+    if (_mapController == null) return;
+    final double? driverLat = data['driver_latitude']?.toDouble();
+    final double? driverLng = data['driver_longitude']?.toDouble();
+    final double? userLat = data['latitude']?.toDouble();
+    final double? userLng = data['longitude']?.toDouble();
+
+    if (driverLat != null && driverLng != null) {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLng(LatLng(driverLat, driverLng)),
+      );
+    } else if (userLat != null && userLng != null) {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLng(LatLng(userLat, userLng)),
+      );
+    }
+  }
+
 
   String _formatTime(String? dateStr) {
     if (dateStr == null) return '4:25 PM';
@@ -232,6 +349,12 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
 
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
+    // If we already have order data, move the camera to the user location
+    if (_orderData != null && _orderData!['latitude'] != null) {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLng(LatLng(_orderData!['latitude'], _orderData!['longitude'])),
+      );
+    }
   }
 
   @override
@@ -246,10 +369,11 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
               initialCameraPosition: CameraPosition(
                 target: _orderData != null && _orderData!['latitude'] != null
                     ? LatLng(_orderData!['latitude'], _orderData!['longitude'])
-                    : const LatLng(37.7749, -122.4194),
+                    : const LatLng(30.3753, 69.3451), // Default to Pakistan range for testing
                 zoom: 15,
               ),
               markers: _markers,
+              polylines: _polylines,
               style: _mapStyle,
               zoomControlsEnabled: false,
               myLocationButtonEnabled: false,

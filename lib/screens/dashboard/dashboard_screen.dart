@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import '../notifications/notifications_screen.dart';
 import '../order/vehicle_selection_screen.dart';
-import '../../services/supabase_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/profile_service.dart';
+import '../../services/vehicle_service.dart';
 import '../../services/notification_store.dart';
+import '../../services/inventory_service.dart';
 import '../profile/settings_screen.dart';
 import '../../widgets/custom_bottom_nav_bar.dart';
+import '../../services/order_service.dart';
 import '../order/add_vehicle_screen.dart';
 import '../order/order_history_screen.dart';
+import '../order/order_tracking_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -18,6 +23,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic>? _profile;
   Map<String, dynamic>? _vehicle;
+  Map<String, dynamic>? _activeOrder;
   int? _selectedFuelIndex;
 
   @override
@@ -27,11 +33,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _loadData() async {
-    final user = SupabaseService.currentUser;
+    final user = AuthService.currentUser;
     if (user != null) {
-      final results = await Future.wait([
-        SupabaseService.getProfile(user.id),
-        SupabaseService.getVehicles(user.id),
+      NotificationStore.instance.syncWithSupabase(user.id);
+      final results = await Future.wait<dynamic>([
+        ProfileService.getProfile(user.id),
+        VehicleService.getVehicles(user.id),
+        OrderService.getActiveOrder(user.id),
       ]);
       
       if (mounted) {
@@ -41,9 +49,82 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (vehicles.isNotEmpty) {
             _vehicle = vehicles.first;
           }
+          _activeOrder = results[2] as Map<String, dynamic>?;
         });
       }
     }
+  }
+
+  Widget _buildActiveOrderBanner() {
+    final status = _activeOrder?['status'] ?? 'PENDING';
+    final fuelType = _activeOrder?['fuel_type'] ?? 'Fuel';
+    
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => OrderTrackingScreen(orderId: _activeOrder!['id']),
+          ),
+        ).then((_) => _loadData());
+      },
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFF6600), Color(0xFFFF9933)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFF6600).withAlpha(60),
+              blurRadius: 15,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withAlpha(50),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.local_shipping_rounded, color: Colors.white, size: 28),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Active Delivery',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$fuelType • $status',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 20),
+          ],
+        ),
+      ),
+    );
   }
 
   IconData _getIconData(String? iconName) {
@@ -169,6 +250,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ],
                   ),
                   const SizedBox(height: 20),
+
+                  // Active Order Banner
+                  if (_activeOrder != null) ...[
+                    _buildActiveOrderBanner(),
+                    const SizedBox(height: 20),
+                  ],
+
+                  const SizedBox(height: 20),
                   // Fuel Types Section
                   Container(
                     padding: const EdgeInsets.all(16),
@@ -189,9 +278,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        StreamBuilder<List<Map<String, dynamic>>>(
-                          stream: SupabaseService.client.from('fuel_prices').stream(primaryKey: ['id']).order('name'),
+                        FutureBuilder<List<Map<String, dynamic>>>(
+                          future: InventoryService.getFuelPrices(),
                           builder: (context, snapshot) {
+                            if (snapshot.hasError) {
+                              return Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(20),
+                                  child: Column(
+                                    children: [
+                                      const Icon(Icons.error_outline, color: Colors.red, size: 40),
+                                      const SizedBox(height: 10),
+                                      Text(
+                                        'Error loading prices: ${snapshot.error}',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(color: Colors.red, fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }
                             if (!snapshot.hasData) {
                               return const Center(child: Padding(
                                 padding: EdgeInsets.all(20),
@@ -199,6 +306,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ));
                             }
                             final prices = snapshot.data!;
+                            if (prices.isEmpty) {
+                              return const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(20),
+                                  child: Text('No fuel prices available', style: TextStyle(color: Colors.grey)),
+                                ),
+                              );
+                            }
                             return GridView.builder(
                               shrinkWrap: true,
                               physics: const NeverScrollableScrollPhysics(),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../services/supabase_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/financial_service.dart';
 import 'package:intl/intl.dart';
 
 class WalletScreen extends StatefulWidget {
@@ -21,10 +22,10 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   Future<void> _loadData() async {
-    final user = SupabaseService.currentUser;
+    final user = AuthService.currentUser;
     if (user != null) {
-      final info = await SupabaseService.getWalletInfo(user.id);
-      final txs = await SupabaseService.getWalletTransactions(user.id);
+      final info = await FinancialService.getWalletInfo(user.id);
+      final txs = await FinancialService.getWalletTransactions(user.id);
       if (mounted) {
         setState(() {
           _walletInfo = info;
@@ -36,7 +37,7 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   Future<void> _topUp() async {
-    final user = SupabaseService.currentUser;
+    final user = AuthService.currentUser;
     if (user == null) return;
 
     // Simulated top-up flow
@@ -62,7 +63,7 @@ class _WalletScreenState extends State<WalletScreen> {
                 Navigator.pop(context);
                 setState(() => _isLoading = true);
                 
-                await SupabaseService.processWalletTransaction(
+                await FinancialService.processWalletTransaction(
                   userId: user.id,
                   amount: amount,
                   type: 'TOPUP',

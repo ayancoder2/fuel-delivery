@@ -3,7 +3,10 @@ import 'dart:ui';
 import 'add_vehicle_screen.dart';
 import 'schedule_delivery_screen.dart';
 import 'add_address_screen.dart';
-import '../../services/supabase_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/vehicle_service.dart';
+import '../../services/profile_service.dart';
+import '../../services/inventory_service.dart';
 
 class VehicleSelectionScreen extends StatefulWidget {
   const VehicleSelectionScreen({super.key});
@@ -35,12 +38,12 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
   }
 
   Future<void> _loadData() async {
-    final user = SupabaseService.currentUser;
+    final user = AuthService.currentUser;
     if (user != null) {
       final results = await Future.wait([
-        SupabaseService.getVehicles(user.id),
-        SupabaseService.getAddresses(user.id),
-        SupabaseService.getFuelPrices(),
+        VehicleService.getVehicles(user.id),
+        ProfileService.getAddresses(user.id),
+        InventoryService.getFuelPrices(),
       ]);
 
       if (mounted) {

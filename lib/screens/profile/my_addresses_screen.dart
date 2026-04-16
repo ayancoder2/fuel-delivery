@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../services/supabase_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/profile_service.dart';
 import '../order/add_address_screen.dart';
 
 class MyAddressesScreen extends StatefulWidget {
@@ -20,9 +21,9 @@ class _MyAddressesScreenState extends State<MyAddressesScreen> {
   }
 
   Future<void> _loadAddresses() async {
-    final user = SupabaseService.currentUser;
+    final user = AuthService.currentUser;
     if (user != null) {
-      final addresses = await SupabaseService.getAddresses(user.id);
+      final addresses = await ProfileService.getAddresses(user.id);
       if (mounted) {
         setState(() {
           _addresses = addresses;
@@ -237,7 +238,7 @@ class _MyAddressesScreenState extends State<MyAddressesScreen> {
                     ),
                   );
                   if (confirm == true) {
-                    await SupabaseService.deleteAddress(addr['id']);
+                    await ProfileService.deleteAddress(addr['id']);
                     _loadAddresses();
                   }
                 },

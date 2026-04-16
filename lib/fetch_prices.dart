@@ -3,7 +3,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   await dotenv.load(fileName: '.env');
-  final client = SupabaseClient(dotenv.get('SUPABASE_URL')!, dotenv.get('SUPABASE_ANON_KEY')!);
+  final client = SupabaseClient(dotenv.get('SUPABASE_URL'), dotenv.get('SUPABASE_ANON_KEY'));
   final res = await client.from('fuel_prices').select();
+  // ignore: avoid_print
   print(res);
 }

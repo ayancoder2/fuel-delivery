@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../services/supabase_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/profile_service.dart';
+import '../../services/inventory_service.dart';
 
 import '../order/plan_selection_screen.dart';
 import 'edit_profile_screen.dart';
@@ -22,6 +24,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   Map<String, dynamic>? _profileData;
   bool _isLoading = true;
+  bool _isRestocking = false;
 
   @override
   void initState() {
@@ -30,15 +33,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadProfileData() async {
-    final user = SupabaseService.currentUser;
-    if (user != null) {
-      final profile = await SupabaseService.getProfile(user.id);
-      if (mounted) {
-        setState(() {
-          _profileData = profile;
-          _isLoading = false;
-        });
+    try {
+      final user = AuthService.currentUser;
+      if (user != null) {
+        final profile = await ProfileService.getProfile(user.id);
+        if (mounted) {
+          setState(() {
+            _profileData = profile;
+          });
+        }
       }
+    } catch (e) {
+      debugPrint('Error loading profile: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _simulateRestock() async {
+    setState(() => _isRestocking = true);
+    try {
+      final loadNumber = 'LOD-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+      await InventoryService.recordFuelLoad(
+        fuelType: 'Petrol',
+        quantity: 1000.0,
+        loadNumber: loadNumber,
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Inventory Restocked! Recorded load: $loadNumber'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Restock failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isRestocking = false);
     }
   }
 
@@ -137,7 +176,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              SupabaseService.currentUser?.email ?? '',
+                                AuthService.currentUser?.email ?? '',
                               style: const TextStyle(
                                 color: Colors.grey,
                                 fontSize: 14,
@@ -268,7 +307,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             final messenger = ScaffoldMessenger.of(context);
                             final navigator = Navigator.of(context);
                             try {
-                              await SupabaseService.signOut();
+                              await AuthService.signOut();
                               if (!context.mounted) return;
                               navigator.pushAndRemoveUntil(
                                 MaterialPageRoute(builder: (context) => const AuthWrapper()),
@@ -304,6 +343,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 32),
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'DEVELOPER OPTIONS',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF999999),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildSettingsCard([
+                        ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withAlpha(30),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.inventory_2_outlined, color: Colors.orange, size: 20),
+                          ),
+                          title: const Text(
+                            'Simulate Restock (1000L Petrol)',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                          subtitle: const Text('Instantly populate fuel_loads and inventory'),
+                          trailing: _isRestocking 
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange))
+                            : const Icon(Icons.flash_on, color: Colors.orange, size: 20),
+                          onTap: _isRestocking ? null : _simulateRestock,
+                        ),
+                      ]),
                       const SizedBox(height: 24),
                       const Text(
                         'Version 24.0 (Premium Fuel Delivery)',

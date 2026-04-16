@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../services/supabase_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/financial_service.dart';
+import '../../services/inventory_service.dart';
 import '../profile/payments_screen.dart';
 import 'select_location_screen.dart';
 
@@ -54,10 +56,10 @@ class _PaymentDetailsScreenState extends State<PaymentDetailsScreen> {
   }
 
   Future<void> _loadPaymentMethods() async {
-    final user = SupabaseService.currentUser;
+    final user = AuthService.currentUser;
     if (user != null) {
-      final methods = await SupabaseService.getPaymentMethods(user.id);
-      final wallet = await SupabaseService.getWalletInfo(user.id);
+      final methods = await FinancialService.getPaymentMethods(user.id);
+      final wallet = await FinancialService.getWalletInfo(user.id);
       if (mounted) {
         setState(() {
           _paymentMethods = methods;
@@ -90,28 +92,50 @@ class _PaymentDetailsScreenState extends State<PaymentDetailsScreen> {
 
     setState(() => _isValidatingCoupon = true);
 
-    final coupon = await SupabaseService.validateCoupon(code);
+    final discountData = await InventoryService.validateDiscount(code);
 
     if (mounted) {
       setState(() {
         _isValidatingCoupon = false;
-        if (coupon != null) {
-          _appliedCoupon = coupon;
-          double discount = 0.0;
-          if (coupon['discount_percentage'] != null && coupon['discount_percentage'] > 0) {
-            discount = _subtotal * (coupon['discount_percentage'] / 100);
-          } else if (coupon['discount_amount'] != null && coupon['discount_amount'] > 0) {
-            discount = (coupon['discount_amount'] as num).toDouble();
+        if (discountData != null) {
+          final double minSpend = (discountData['min_order_amount'] as num?)?.toDouble() ?? 0.0;
+          
+          if (_subtotal < minSpend) {
+            _appliedCoupon = null;
+            _discountedTotal = _subtotal;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Minimum order amount for this discount is \$${minSpend.toStringAsFixed(2)}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            return;
           }
-          _discountedTotal = (_subtotal - discount).clamp(0.0, double.infinity);
+
+          _appliedCoupon = discountData;
+          double discountAmount = 0.0;
+          final String type = discountData['discount_type'] ?? 'FIXED';
+          final double value = (discountData['discount_value'] as num).toDouble();
+
+          if (type == 'PERCENTAGE') {
+            discountAmount = _subtotal * (value / 100);
+            final double? maxDiscount = (discountData['max_discount_amount'] as num?)?.toDouble();
+            if (maxDiscount != null && discountAmount > maxDiscount) {
+              discountAmount = maxDiscount;
+            }
+          } else {
+            discountAmount = value;
+          }
+
+          _discountedTotal = (_subtotal - discountAmount).clamp(0.0, double.infinity);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Coupon applied successfully!'), backgroundColor: Colors.green),
+            const SnackBar(content: Text('Discount applied!'), backgroundColor: Colors.green),
           );
         } else {
           _appliedCoupon = null;
           _discountedTotal = _subtotal;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Invalid or expired coupon'), backgroundColor: Colors.red),
+            const SnackBar(content: Text('Invalid or expired discount code'), backgroundColor: Colors.red),
           );
         }
       });
@@ -566,6 +590,7 @@ class _PaymentDetailsScreenState extends State<PaymentDetailsScreen> {
                           discount: '\$${(_subtotal - _discountedTotal).toStringAsFixed(2)}',
                           amount: '\$${_discountedTotal.toStringAsFixed(2)}',
                           couponCode: _appliedCoupon != null ? _appliedCoupon!['code'] : null,
+                          discountId: _appliedCoupon != null ? _appliedCoupon!['id'] : null,
                           vehicleId: widget.vehicleId,
                           useWallet: _useWallet,
                           scheduledDate: widget.scheduledDate,
