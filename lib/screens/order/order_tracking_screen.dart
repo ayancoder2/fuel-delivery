@@ -120,14 +120,16 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
         _animateCameraForOrder(activeOrder);
 
         // Start simulation if no driver yet
-        // Start simulation if not finished
-        if (!_simulationStarted && activeOrder['status'] != 'DELIVERED') {
+        // Simulation auto-start disabled as per user request to test real tracking
+        /*
+        if (!_simulationStarted && activeOrder['status'] != 'completed') {
           _simulationStarted = true;
           DriverSimulationService.startOrderSimulation(
             activeOrder['id'],
             LatLng(activeOrder['latitude'], activeOrder['longitude']),
           );
         }
+        */
       } else {
         setState(() => _isLoading = false);
       }
@@ -152,14 +154,16 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
         // Animate camera AFTER setState (safe outside)
         _animateCameraForOrder(order);
 
-        // Trigger simulation if not finished
-        if (!_simulationStarted && order['status'] != 'DELIVERED' && order['latitude'] != null) {
+        // Simulation auto-start disabled as per user request to test real tracking
+        /*
+        if (!_simulationStarted && order['status'] != 'completed' && order['latitude'] != null) {
           _simulationStarted = true;
            DriverSimulationService.startOrderSimulation(
              _currentOrderId!, 
              LatLng(order['latitude'], order['longitude']),
            );
         }
+        */
       } catch (e) {
         debugPrint('Error fetching order initially: $e');
         // fall back to stream only, but turn off loading after a delay if still empty
@@ -239,7 +243,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
       );
     }
 
-    // Ensure simulation is running
+    // Simulation auto-start disabled as per user request to test real tracking
+    /*
     if (!_simulationStarted && status != 'DELIVERED') {
       _simulationStarted = true;
       DriverSimulationService.startOrderSimulation(
@@ -247,6 +252,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
         LatLng(newOrderData['latitude'] ?? 30.3753, newOrderData['longitude'] ?? 69.3451),
       );
     }
+    */
   }
 
   double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
@@ -314,7 +320,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     return (newMarkers, newPolylines);
   }
 
-  /// Animates the map camera based on driver/user position. Safe to call outside setState.
+  /// Animates the map camera to fit both driver and destination.
   void _animateCameraForOrder(Map<String, dynamic> data) {
     if (_mapController == null) return;
     final double? driverLat = data['driver_latitude']?.toDouble();
@@ -322,7 +328,22 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     final double? userLat = data['latitude']?.toDouble();
     final double? userLng = data['longitude']?.toDouble();
 
-    if (driverLat != null && driverLng != null) {
+    if (driverLat != null && driverLng != null && userLat != null && userLng != null) {
+      // Zoom to fit both
+      final bounds = LatLngBounds(
+        southwest: LatLng(
+          min(driverLat, userLat),
+          min(driverLng, userLng),
+        ),
+        northeast: LatLng(
+          max(driverLat, userLat),
+          max(driverLng, userLng),
+        ),
+      );
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 100), // 100px padding
+      );
+    } else if (driverLat != null && driverLng != null) {
       _mapController!.animateCamera(
         CameraUpdate.newLatLng(LatLng(driverLat, driverLng)),
       );
@@ -349,11 +370,12 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
 
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
-    // If we already have order data, move the camera to the user location
-    if (_orderData != null && _orderData!['latitude'] != null) {
-      _mapController!.animateCamera(
-        CameraUpdate.newLatLng(LatLng(_orderData!['latitude'], _orderData!['longitude'])),
-      );
+    // Set map style
+    _mapController!.setMapStyle(_mapStyle);
+    
+    // If we already have order data, move the camera
+    if (_orderData != null) {
+      _animateCameraForOrder(_orderData!);
     }
   }
 
@@ -374,7 +396,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
               ),
               markers: _markers,
               polylines: _polylines,
-              style: _mapStyle,
+              // style: _mapStyle, // Moved style to onMapCreated for reliability
               zoomControlsEnabled: false,
               myLocationButtonEnabled: false,
               compassEnabled: false,
@@ -494,7 +516,9 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                               textBaseline: TextBaseline.alphabetic,
                               children: [
                                 Text(
-                                  _orderData?['estimated_minutes']?.toString() ?? '15',
+                                  (_orderData?['estimated_minutes']?.toString() ?? 
+                                   _orderData?['eta']?.toString().split(' ')[0] ?? 
+                                   '15'),
                                   style: const TextStyle(
                                     color: Color(0xFFFF6600),
                                     fontSize: 32,
@@ -514,7 +538,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                             ),
                             Flexible(
                               child: Text(
-                                _orderData?['status'] == 'DELIVERED' 
+                                _orderData?['status'] == 'completed' 
                                     ? 'Expected Arrival: Arrived'
                                     : 'Arriving at ${_formatTime(_orderData?['scheduled_time'])}',
                                 textAlign: TextAlign.right,

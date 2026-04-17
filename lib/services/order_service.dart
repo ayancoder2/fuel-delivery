@@ -26,19 +26,31 @@ class OrderService {
     }
 
     final String orderNumber = 'ORD-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+    final double unitPrice = (totalPrice ?? 0.0) / (qtyNeeded > 0 ? qtyNeeded : 1.0);
+    final double driverEarning = (totalPrice ?? 0.0) * 0.15;
 
     final response = await client.from('orders').insert({
       'user_id': userId,
       'order_number': orderNumber,
       'vehicle_id': vehicleId,
+      'driver_id': null, // Clear driver_id so it shows in 'Available' tab
+      'status': 'PENDING', // Ensure status is PENDING
       'fuel_type': fuelType,
       'quantity': quantity,
       'total_price': totalPrice,
       'delivery_address': address,
       'latitude': lat,
       'longitude': lng,
+      'delivery_lat': lat, // Supporting Driver App schema
+      'delivery_lng': lng, // Supporting Driver App schema
       'scheduled_time': scheduledTime?.toIso8601String(),
       'discount_id': discountId,
+      'total_amount': totalPrice,
+      'fuel_quantity': quantity,
+      'fuel_quantity_gallons': quantity,
+      'unit_price': unitPrice,
+      'driver_earning': driverEarning,
+      'assigned_at': null, // Will be set when driver accepts
     }).select().single();
 
     await InventoryService.decrementFuelInventory(fuelType ?? 'Petrol', qtyNeeded);
@@ -90,12 +102,14 @@ class OrderService {
     required String driverName,
     required String driverPhoto,
     required String driverVehicle,
+    String? eta,
   }) async {
     await client.from('orders').update({
       'driver_name': driverName,
       'driver_photo': driverPhoto,
       'driver_vehicle': driverVehicle,
-      'status': 'ON_THE_WAY',
+      'eta': eta ?? '15 mins',
+      'status': 'ASSIGNED', // Match DB ENUM
     }).eq('id', orderId);
 
     final orderData = await client.from('orders').select('user_id').eq('id', orderId).single();
@@ -118,7 +132,10 @@ class OrderService {
   }
 
   static Future<void> completeOrder(String orderId) async {
-    await client.from('orders').update({'status': 'DELIVERED'}).eq('id', orderId);
+    await client.from('orders').update({
+      'status': 'DELIVERED', // Match DB ENUM
+      'completed_at': DateTime.now().toIso8601String(),
+    }).eq('id', orderId);
 
     final orderData = await client.from('orders').select('user_id').eq('id', orderId).single();
     final userId = orderData['user_id'];
