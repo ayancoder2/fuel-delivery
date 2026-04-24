@@ -102,9 +102,11 @@ class OrderService {
     required String driverName,
     required String driverPhoto,
     required String driverVehicle,
+    String? driverId,
     String? eta,
   }) async {
     await client.from('orders').update({
+      'driver_id': driverId,
       'driver_name': driverName,
       'driver_photo': driverPhoto,
       'driver_vehicle': driverVehicle,
@@ -112,9 +114,15 @@ class OrderService {
       'status': 'ASSIGNED', // Match DB ENUM
     }).eq('id', orderId);
 
+    // ── NOTIFY DRIVER (Push Notification) ──
+    if (driverId != null) {
+      await NotificationService.notifyAssignedDriver(driverId, orderId);
+    }
+
     final orderData = await client.from('orders').select('user_id').eq('id', orderId).single();
     final userId = orderData['user_id'];
     
+    // ── NOTIFY USER (Local/DB Notification) ──
     if (userId != null) {
       await NotificationService.sendNotification(
         userId: userId,
@@ -123,6 +131,7 @@ class OrderService {
       );
     }
   }
+
 
   static Future<void> updateDriverLocation(String orderId, double lat, double lng) async {
     await client.from('orders').update({

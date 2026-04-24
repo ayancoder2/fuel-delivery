@@ -180,4 +180,28 @@ class NotificationService {
       debugPrint('Error marking notification as read: $e');
     }
   }
+
+  /// Call this function right after the user assigns or updates an order in Supabase
+  static Future<void> notifyAssignedDriver(String assignedDriverId, String orderId) async {
+    try {
+      // This targets the already existing Edge Function
+      await Supabase.instance.client.functions.invoke(
+        'send-notification',
+        body: {
+          'target_type': 'driver',       // DO NOT CHANGE: Tells backend to fetch token from drivers table
+          'target_id': assignedDriverId, // The ID of the driver (from the drivers table) receiving the order
+          'title': 'New Order Assigned 🔥',
+          'body': 'You have been assigned a new fuel delivery order!',
+          'data': {
+            'type': 'order_update', 
+            'order_id': orderId
+          },
+        },
+      );
+      debugPrint('✅ Push notification triggered successfully to the driver.');
+    } catch (e) {
+      debugPrint('❌ Failed to trigger driver notification: $e');
+    }
+  }
 }
+

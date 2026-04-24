@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'order_service.dart';
+import 'notification_service.dart';
 
 class DriverSimulationService {
   static final Map<String, Timer?> _simulations = {};
@@ -42,7 +43,21 @@ class DriverSimulationService {
         // Mock driver assignment after 1 second
         try {
           final now = DateTime.now().toIso8601String();
+          
+          // TRY TO FETCH A REAL DRIVER FROM DB FOR TESTING PUSH NOTIFICATIONS
+          String? testDriverId;
+          try {
+            final testDriver = await OrderService.client.from('drivers').select('id').limit(1).maybeSingle();
+            if (testDriver != null) {
+              testDriverId = testDriver['id'];
+              debugPrint('SIMULATION: Using real Driver ID for push test: $testDriverId');
+            }
+          } catch (e) {
+            debugPrint('SIMULATION: No real drivers found, FCM might fail: $e');
+          }
+
           await OrderService.client.from('orders').update({
+            'driver_id': testDriverId,
             'driver_name': 'Robert Wilson',
             'driver_photo': 'https://randomuser.me/api/portraits/men/32.jpg',
             'driver_vehicle': 'Volvo FH16 Tanker (ABC-1234)',
@@ -53,11 +68,18 @@ class DriverSimulationService {
             'meter_reading_start': '4523.50',
             'pickup_photo_url': 'https://images.unsplash.com/photo-1542224566-6e85f2e6772f?auto=format&fit=crop&w=800',
           }).eq('id', orderId);
-          debugPrint('SIMULATION: Status updated to in_progress for $orderId');
+
+          // ── TRIGGER FCM NOTIFICATION ──
+          if (testDriverId != null) {
+             await NotificationService.notifyAssignedDriver(testDriverId, orderId);
+          }
+
+          debugPrint('SIMULATION: Status updated to on_the_way for $orderId');
         } catch (e) {
           debugPrint('SIMULATION ERROR [initial benchmarks]: $e');
         }
       }
+
 
       if (currentStep == (totalSteps ~/ 2)) {
         // Mock arrival at half way
