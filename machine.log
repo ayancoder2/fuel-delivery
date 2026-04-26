@@ -1,0 +1,2 @@
+﻿ERROR|COMPILE_TIME_ERROR|MISSING_REQUIRED_ARGUMENT|C:\\Users\\AFZAL COMPUTERS\\Documents\\fuel delivery\\Fueldirect_user_appp\\lib\\screens\\order\\fuel_selection_screen.dart|134|41|22|The named parameter 'latitude' is required, but there's no corresponding argument.
+ERROR|COMPILE_TIME_ERROR|MISSING_REQUIRED_ARGUMENT|C:\\Users\\AFZAL COMPUTERS\\Documents\\fuel delivery\\Fueldirect_user_appp\\lib\\screens\\order\\fuel_selection_screen.dart|134|41|22|The named parameter 'longitude' is required, but there's no corresponding argument.
